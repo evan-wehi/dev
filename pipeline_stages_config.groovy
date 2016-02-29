@@ -13,6 +13,20 @@ fastqc = {
     }
 }
 
+createBWAIndex = {
+    doc "Run BWA index on fasta if not available."
+    output.dir="$REFBASE/indexes"
+    exec "bwa index -a bwtsw -p Pfalciparum.genome $REF"
+    
+}
+
+// Malaria Gen Consortium uses bwa mem
+alignBWAmem = {
+    doc "Aligns using BWA mem. Note: assumes input file are zipped"
+    output.dir="$REFBASE/aligned_bams"
+    exec "bwa mem -t 8 -M $REFBASE/indexes  $input.gz > $output.sam"
+}
+
 @transform("sai")
 alignBWA = {
     doc "Aligns using BWA. Note: assumes input file are gzipped"
@@ -36,7 +50,7 @@ samToSortedBam = {
     doc "Sort a SAM file so that it is compatible with reference order and convert to BAM file"
     output.dir="align"
     exec """
-        java -Xmx2g -Djava.io.tmpdir=$TMPDIR  -jar $PICARD_HOME/lib/SortSam.jar 
+        java -Xmx2g -Djava.io.tmpdir=$TMPDIR  -jar $PICARD_HOME/SortSam.jar 
                     VALIDATION_STRINGENCY=LENIENT 
                     INPUT=$input.sam 
                     OUTPUT=$output.bam 
@@ -69,10 +83,6 @@ indexBam = {
 
 flagstat = {
     exec "samtools flagstat $input.bam > $output"
-}
-
-igvcount = {
-    exec "igvtools count $input.bam $output hg19"
 }
 
 indexVCF = {
@@ -120,7 +130,7 @@ baseQualRecalTabulate = {
 }
 
 callSNPs = {
-    doc "Call SNPs/SNVs using GATK Unified Genotyper"
+    doc "Call SNPs/SNVs using GATK Haplotype Caller"
     output.dir="variants"
     exec """
             java -Xmx12g -jar $GATK/GenomeAnalysisTK.jar -T UnifiedGenotyper 
