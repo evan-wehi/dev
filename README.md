@@ -1,4 +1,8 @@
-# GATK Based WGS Variant Calling Pipeline: Bpipe Example
+# Plasmodium falciparum WGS variant calling pipeline
+This is my attempt to replicate the pipeline used by the [Malaria Genomics Consortium](https://www.malariagen.net/projects/parasite/pf)
+for calling single nucleotide variants (SNVs) from paired-end whole-genome sequencing data.
+
+It is a bpipe pipeline adapted from https://github.com/ssadedin/variant_calling_pipeline/ 
 
 ## Overview
 
