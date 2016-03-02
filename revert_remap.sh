@@ -20,7 +20,7 @@ java -Xmx8g -Djava.io.tmpdir=$TMPDIR  -jar $PICARD_HOME/RevertSam.jar \
   SORT_ORDER=coordinate | java -jar $PICARD_HOME/SamToFastq.jar \
   INPUT=/dev/stdin \
   OUTPUT_PER_RG=true \
-  OUTPUT_DIR=./fastq \
+  OUTPUT_DIR=./fastq/${SM} \
   VALIDATION_STRINGENCY=SILENT
 
 
@@ -29,3 +29,28 @@ java -Xmx8g -Djava.io.tmpdir=$TMPDIR  -jar $PICARD_HOME/RevertSam.jar \
 r1=$(find ./fastq -name "*_1.fastq" | sort -u)
 r2=$(find ./fastq -name "*_2.fastq" | sort -u)
 
+
+bwa mem -M -r $rgline r1.fastq r2.fastq | 
+	java -Xmx8g -jar $PICARD_HOME/CleanSam.jar \
+      INPUT=/dev/stdin \
+      OUTPUT=/dev/stdout \
+      VALIDATION_STRINGENCY=SILENT \
+    | java -Xmx8g -jar $PICARD_HOME/SortSam.jar \
+      INPUT=/dev/stdin \
+      OUTPUT=${SM}.${id}.sort.bam \
+      SORT_ORDER=coordinate \
+      CREATE_INDEX=FALSE \
+      TMP_DIR=$TempDir
+
+# merge bams
+sort_bams=$(find ./${SM} -name "${SM}*.sort.bam" -print0 | xargs -0 -I {} echo "INPUT={} ")
+
+java -Xmx8g -Djava.io.tmpdir=$TMPDIR  -jar $PICARD_HOME/MergeSamFiles.jar \
+        ${sort_bams} \
+        USE_THREADING=true \
+        VALIDATION_STRINGENCY=LENIENT \ 
+        AS=true \
+        SORT_ORDER=coordinate \
+        OUTPUT=${SM}.merged.bam
+
+samtools index ${SM}.merged.bam
