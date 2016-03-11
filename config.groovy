@@ -24,10 +24,9 @@ GATK="/usr/local/bioinfsoftware/gatk/current/"
 // Set location of snpEff here
 SNPEFF_HOME="/usr/local/bioinfsoftware/snpEff/current"
 //Set location of snpEff config file
-SNPEFF_CONFIG=$REFBASE/annotations/
+SNPEFF_CONFIG="$REFBASE/annotations/snpEff.config"
 
-// This is only used for setting read group information in the
-// BAM files
-PLATFORM="illumina"
+// set location for region based annotations
+CORE_REGIONS="$REFBASE/annotations/regions-20130225.onebased.txt"
 
 
