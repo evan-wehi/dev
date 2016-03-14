@@ -8,7 +8,7 @@ TMPDIR="/usr/local/work/lee.s"
 PICARD_HOME="/usr/local/bioinfsoftware/picard-tools/current/jars"
 
 // Set to the reference FASTA file, which must be indexed
-REF="$REFBASE/Pfalciparum.genome.fasta"
+REF="$REFBASE/fasta/Pfalciparum.genome.fasta"
 
 // Set to a VCF file containing genetic cross entries
 REFSNP1="data/known_sites/3d7_hb3.combined.final.vcf.gz"      
