@@ -4,26 +4,29 @@
 // pipeline. See pipeline.groovy for more information.
 // 
 ////////////////////////////////////////////////////////
-
 createBWAIndex = {
     doc "Run BWA index on fasta if not available."
-    output.dir="$REFBASE/indexes"
-    exec "bwa index -a bwtsw -p Pfalciparum.genome $REF"
-    
+
+    exec """
+        bwa index -a bwtsw -p Pfalciparum.genome $REF
+        mv Pfalciparum.genome.* $REFBASE/fasta/
+
+    """
+
 }
 
 fastaIndex = {
     doc "index fasta file if not available"
     exec "samtools faidx $REF"
 }
+
 createDictionary = {
     doc "Create Sequence dictionary"
-    exec "java -jar $PICARD_HOME/CreateSequenceDictionary.jar R=$REF O=Pfalciparum.genome.dict"
+    exec "java -jar $PICARD_HOME/CreateSequenceDictionary.jar R=$REF O=$REFBASE/fasta/Pfalciparum.genome.dict"
 }
 
 remapBWAmem = {
     doc "Extract fastq from BAM file and remap using bwa mem"
-    output.dir="$REFBASE/aligned_bams"
     exec "sh revert_remamp.sh $input.bam"
 }
 
@@ -87,7 +90,7 @@ bqsrPass2 = {
                 -knownSites $REFSNP1  
                 -knownSites $REFSNP2 
                 -knownSites $REFSNP3 
-                -BQSR $input.table \ 
+                -BQSR $input.table  
                 -o $output.pass2.table 
         """
 }
@@ -99,8 +102,8 @@ bqsrCheck = {
         java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
             -T AnalyzeCovariates
             -R $REF
-            -before $input.pass1.table \
-            -after $input.pass2.table \
+            -before $input.pass1.table 
+            -after $input.pass2.table 
             -plots $ouptut.bqsr.pdf
     """
 }
@@ -144,8 +147,10 @@ depthOfCoverage = {
                     -omitBaseOutput 
                     -ct 1 -ct 5 -ct 10
                     -o $output
-        """
+        """ 
     }
+ 
+}
 
 callVariants = {
     doc "Call SNPs/SNVs using GATK Haplotype Caller, produces .g.vcf"
@@ -162,17 +167,18 @@ callVariants = {
         """
 }
 
-genotype = {
-    doc "Jointly genotype gVCF files"
-    output.dir="variants"
-    exec """
-         gvcf_files=$(find ./variants -name "*.g.vcf" -print0 | xargs -0 -I {} echo "--variant {}")
-         java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar
-            -T GenotypeGVCFs
-            $gvcf_files
-            -o all_raw.vcf
-    """
-}
+//genotype = {
+//    doc "Jointly genotype gVCF files"
+//    output.dir="variants"
+//    exec """
+
+//        gvcf_files=$(find ./variants -name '*.g.vcf' -print0 | xargs -0 -I {} echo '--variant {}')
+//        java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar
+//            -T GenotypeGVCFs
+//            $gvcf_files
+//            -o all_raw.vcf
+//    """
+//}
 
 // variant recalibration
 vqsrGenerate = {
