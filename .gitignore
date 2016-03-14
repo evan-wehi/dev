@@ -1,2 +1,4 @@
 *.pyc
 .bpipe/
+data/fastq/*
+data/aligned_bams/
