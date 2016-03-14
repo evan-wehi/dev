@@ -36,33 +36,36 @@ load 'config.groovy'
 // All the core pipeline stages in the pipeline
 load 'pipeline_stages_config.groovy'
 
-run {
+
+run { "*.bam" * [ remapBWAmem ] }
+//
+//run {
     // Create index for reference file
-    [
-     createBWAIndex + fastaIndex
-    ] +
-    // Pre-process each unmapped BAM file separately in parallel
-    // Map, sort clean then dedup
-    // Realign indels
-    // Recalibrate base-quality scores
-    // Run QC
-    // Call variants
-    "*.bam" * [
-               remapBWAmem +
-               dedup +
-               realignIntervals +
-               realignIndels +
-               bqsrPass1 +
-               bqsrPass2 +
-               bqsrCheck +
-               bqsrApply +
-               fastqc +
-               flagstat +
-               depthOfCoverage +
-               callVariants
+//    [
+//     createBWAIndex + fastaIndex
+//    ] +
+//    // Pre-process each unmapped BAM file separately in parallel
+//    // Map, sort clean then dedup
+//    // Realign indels
+//    // Recalibrate base-quality scores
+//    // Run QC
+//   // Call variants
+//    "*.bam" * [
+//               remapBWAmem +
+//               dedup +
+//               realignIntervals +
+//               realignIndels +
+//               bqsrPass1 +
+//              bqsrPass2 +
+            //   bqsrCheck +
+          //     bqsrApply +
+        //       fastqc +
+       //        flagstat +
+     //          depthOfCoverage +
+     //          callVariants
 
-    ] + 
+    //] + 
         // For each g.vcf will jointly call genotypes then apply VQSR
-      [ genotype + vqsrGenerate + vqsrApply + annotateVariants + filterSNPs
+      //[ genotype + vqsrGenerate + vqsrApply + annotateVariants + filterSNPs
 
-}
+//}
