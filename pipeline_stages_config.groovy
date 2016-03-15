@@ -25,29 +25,53 @@ createDictionary = {
     exec "java -jar $PICARD_HOME/CreateSequenceDictionary.jar R=$REF O=$REFBASE/fasta/Pfalciparum.genome.dict"
 }
 
+// this could probably be broken up into multiple steps
+// but I'm still learning bpipe intricacies 
 remapBWAmem = {
     doc "Extract fastq from BAM file and remap using bwa mem"
-    exec "sh revert_remamp.sh $input.bam"
+    exec "./revert_remap.sh $input.bam"
 }
 
+sampleID = {
+    bamfile="$input".replaceAll(".bam", ".merged.bam")
+    sm=bamfile.replaceAll(/^.*\/{1}/, '')
+    branch.sample="$sm"
+}
+
+@transform(".intervals")
 realignIntervals = {
-    output.dir="aligned_bams"
+    output.dir="$REFBASE/aligned_bams"
     exec """
-        java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar -T RealignerTargetCreator -R $REF -I $input.bam -log $LOG -o $output.intervals
+        java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
+          -T RealignerTargetCreator
+          -R $REF 
+          -I $REFBASE/aligned_bams/$sample
+          -log $LOG
+          -nt $NTHREAD_GATK 
+          -o $output.intervals
     """
 }
+
 realignIndels = {
-    output.dir="aligned_bams"
+    output.dir="$REFBASE/aligned_bams"
     exec """
-        java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar -T IndelRealigner -R $REF -I $input.bam -targetIntervals $input.intervals -log $LOG -o $output.bam
+        java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar 
+          -T IndelRealigner 
+          -R $REF 
+          -I $REFBASE/aligned_bams/$sample
+          -targetIntervals $input.intervals 
+          -log $LOG
+          -nt $NTHREAD_GATK
+          -o $output.bam
     """
 }
 
 dedup = {
-    output.dir="align"
+    doc "Mark Duplicates with PicardTools"
+    output.dir="$REFBASE/aligned_bams" 
     exec """
         java -Xmx6g -Djava.io.tmpdir=$TMPDIR -jar $PICARD_HOME/MarkDuplicates.jar
-             INPUT=$input.bam 
+             INPUT=$input.bam
              REMOVE_DUPLICATES=true 
              VALIDATION_STRINGENCY=LENIENT 
              AS=true 
@@ -57,15 +81,10 @@ dedup = {
 }
 
 
-indexVCF = {
-    exec "./vcftools_prepare.sh $input.vcf"
-}
-
-
-
+@transform(".pass1.table")
 bqsrPass1 = {
     doc "Recalibrate base qualities in a BAM file so that quality metrics match actual observed error rates"
-    output.dir="align"
+    output.dir="aligned_bams"
     exec """
             java -Xmx12g -jar $GATK/GenomeAnalysisTK.jar
                 -T BaseRecalibrator 
@@ -74,14 +93,16 @@ bqsrPass1 = {
                 -knownSites $REFSNP1  
                 -knownSites $REFSNP2 
                 -knownSites $REFSNP3
+                -nt $NTHREAD_GATK
                 -o $output.pass1.table 
         """
     
 }
 
+@transform(".pass2.table")
 bqsrPass2 = {
     doc "Recalibrate base qualities in a BAM file so that quality metrics match actual observed error rates"
-    output.dir="align"
+    output.dir="aligned_bams"
     exec """
             java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar 
                 -T BaseRecalibrator 
@@ -90,27 +111,15 @@ bqsrPass2 = {
                 -knownSites $REFSNP1  
                 -knownSites $REFSNP2 
                 -knownSites $REFSNP3 
-                -BQSR $input.table  
+                -BQSR $input.pass1.table
+                -nt $NTHREAD_GATK  
                 -o $output.pass2.table 
         """
 }
 
-bqsrCheck = {
-    doc "Compare pre and post base-quality scores from recalibration"
-    output.dir="qc"
-    exec """
-        java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
-            -T AnalyzeCovariates
-            -R $REF
-            -before $input.pass1.table 
-            -after $input.pass2.table 
-            -plots $ouptut.bqsr.pdf
-    """
-}
-
 bqsrApply = {
     doc "Apply BQSR to input BAM file."
-    output.dir="align"
+    output.dir="aligned_bams"
     exec """
         java -jar $GATK/GenomeAnalysisTK.jar  
             -T PrintReads  
@@ -119,6 +128,22 @@ bqsrApply = {
             -BQSR $input.pass1.table  
             -o $output.bam
     """ 
+}
+
+bqsrCheck = {
+    doc "Compare pre and post base-quality scores from recalibration"
+    output.dir="qc"
+    from(".pass1.table", ".pass2.table", ".bqsr.pdf") {
+        exec """
+            java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
+              -T AnalyzeCovariates
+              -R $REF
+              -before $input.pass1.table 
+              -after $input.pass2.table 
+              -plots $ouptut.bqsr.pdf
+
+        """
+    }
 }
 
 fastqc = {
@@ -132,7 +157,9 @@ fastqc = {
 // QC metrics at BAM level
 flagstat = {
     output.dir = "qc"
-    exec "samtools flagstat $input.bam > $output"
+    transform('.bam') to('.flagstat') {
+        exec "samtools flagstat $input.bam > $output.flagstat"
+    }
 }
 
 
@@ -142,20 +169,24 @@ depthOfCoverage = {
     transform("bam") to ("sample_statistics","sample_interval_summary") {
         exec """
             java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
-                    -T DepthOfCoverage 
-                    -R $REF -I $input.bam 
-                    -omitBaseOutput 
-                    -ct 1 -ct 5 -ct 10
-                    -o $output
+              -T DepthOfCoverage 
+              -R $REF -I $input.bam 
+              -omitBaseOutput 
+              -ct 1 -ct 5 -ct 10
+              -o $output
         """ 
-    }
- 
+    }    
 }
+
+indexVCF = {
+    exec "./vcftools_prepare.sh $input.vcf"
+}
+
 
 callVariants = {
     doc "Call SNPs/SNVs using GATK Haplotype Caller, produces .g.vcf"
     output.dir="variants"
-    transform(".bam") to (".g.vcf")
+    transform(".bam") to(".g.vcf") {}
     exec """
         java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar
             -T HaplotypeCaller 
@@ -254,9 +285,7 @@ addRegionsAnnotation = {
 // variant filtering
 @filter("filter")
 filterSNPs = {
-    // Very minimal hard filters based on GATK recommendations. VQSR is preferable if possible.
     output.dir="variants"
-
     exec """
         java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
             -T VariantFiltration 
