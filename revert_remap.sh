@@ -19,15 +19,25 @@ if [[ ! -d data/fastq/${SM} ]]; then
   mkdir -p data/fastq/${SM}
 fi
 
+# revert SAM file, mark adapters then clip them
 java -Xmx8g -Djava.io.tmpdir=$TMPDIR  -jar $PICARD_HOME/RevertSam.jar \
-  VALIDATION_STRINGENCY=SILENT \
-  INPUT=$bam \
-  OUTPUT=/dev/stdout \
-  COMPRESSION_LEVEL=0 | java -Xmx8g  -jar $PICARD_HOME/SamToFastq.jar \
-  INPUT=/dev/stdin \
-  OUTPUT_PER_RG=true \
-  OUTPUT_DIR=data/fastq/${SM} \
-  VALIDATION_STRINGENCY=SILENT
+VALIDATION_STRINGENCY=SILENT \
+INPUT=$bam \
+OUTPUT=/dev/stdout \
+SORT_ORDER=queryname \
+COMPRESSION_LEVEL=0 | java -Xmx8g -jar $PICARD_HOME/MarkIlluminaAdapters.jar \
+INPUT=/dev/stdin \
+OUTPUT=/dev/stdout \
+COMPRESSION_LEVEL=0 \
+M=${SM}.adapters.txt | java -Xmx8g  -jar $PICARD_HOME/SamToFastq.jar \
+INPUT=/dev/stdin \
+CLIPPING_ATTRIBUTE=XT \
+CLIPPING_ACTION=2 \
+RG_TAG=ID \
+OUTPUT_PER_RG=true \
+OUTPUT_DIR=data/fastq/${SM} \
+VALIDATION_STRINGENCY=SILENT \
+TMP_DIR=$TMPDIR
 
 
 # next remap using bwa mem
@@ -42,34 +52,36 @@ do
   rg=$(echo -e $rgline | grep -e ID:$id | sed 's/ /\\t/g')
   echo "Aligning SM: ${SM} for ID:${id}"
   p2=$(find ./data/fastq/${SM} -name "${id}_2.fastq")
-  echo "Input fastq files: ${p1}, ${p2}"
   echo "RG line: ${rg}"
   # if paired-end
-  if [ ! -z "$p2" ] 
-  then
+  if [ ! -z $p2 ] 
+    then
+    echo "Input fastq files: ${p1}, ${p2}"
     echo "Running bwa mem with paired end alignments"
     bwa mem -M -t 8 -R "${rg}" $bwaIndex $p1 $p2 | java -Xmx8g -jar $PICARD_HOME/CleanSam.jar \
-      INPUT=/dev/stdin \
-      OUTPUT=/dev/stdout \
-      VALIDATION_STRINGENCY=SILENT | java -Xmx8g -jar $PICARD_HOME/SortSam.jar \
-      INPUT=/dev/stdin \
-      OUTPUT=${SM}.${id}.sort.bam \
-      SORT_ORDER=coordinate \
-      CREATE_INDEX=FALSE \
-      TMP_DIR=$TempDir
+    INPUT=/dev/stdin \
+    OUTPUT=/dev/stdout \
+    VALIDATION_STRINGENCY=SILENT | java -Xmx8g -jar $PICARD_HOME/SortSam.jar \
+    INPUT=/dev/stdin \
+    OUTPUT=data/fastq/${SM}/${SM}.${id}.sort.bam \
+    SORT_ORDER=coordinate \
+    CREATE_INDEX=FALSE \
+    TMP_DIR=$TMPDIR
   else
+    echo "Running bwa mem with single-end alignments"
     bwa mem -M -t 8 -R $rg $bwaIndex $p1 | java -Xmx8g -jar $PICARD_HOME/CleanSam.jar \
-      INPUT=/dev/stdin \
-      OUTPUT=/dev/stdout \
-      VALIDATION_STRINGENCY=SILENT | java -Xmx8g -jar $PICARD_HOME/SortSam.jar \
-      INPUT=/dev/stdin \
-      OUTPUT=${SM}.${id}.sort.bam \
-      SORT_ORDER=coordinate \
-      CREATE_INDEX=FALSE \
-      TMP_DIR=$TempDir
+    INPUT=/dev/stdin \
+    OUTPUT=/dev/stdout \
+    VALIDATION_STRINGENCY=SILENT | java -Xmx8g -jar $PICARD_HOME/SortSam.jar \
+    INPUT=/dev/stdin \
+    OUTPUT=data/fastq/${SM}/${SM}.${id}.sort.bam \
+    SORT_ORDER=coordinate \
+    CREATE_INDEX=FALSE \
+    TMP_DIR=$TMPDIR
   fi
 
 done
+
 # merge bams and output to aligned_bams directory
 sort_bams=$(find data/fastq/${SM} -name "${SM}*.sort.bam" -print0 | xargs -0 -I {} echo "INPUT={} ")
 
