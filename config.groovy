@@ -20,6 +20,7 @@ LOG="pipeline.log"
 
 // Set GATK location here
 GATK="/usr/local/bioinfsoftware/gatk/current/"
+NTHREAD_GATK=4
 
 // Set location of snpEff here
 SNPEFF_HOME="/usr/local/bioinfsoftware/snpEff/current"
