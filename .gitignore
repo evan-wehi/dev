@@ -2,3 +2,5 @@
 .bpipe/
 data/fastq/*
 data/aligned_bams/
+pipeline.log
+commandlog.txt
