@@ -20,8 +20,7 @@ LOG="pipeline.log"
 
 // Set GATK location here
 GATK="/usr/local/bioinfsoftware/gatk/current/"
-NTHREAD_GATK=4
-
+GATK35="~/GenomeAnalysisTK-3.5"
 // Set location of snpEff here
 SNPEFF_HOME="/usr/local/bioinfsoftware/snpEff/current"
 //Set location of snpEff config file
@@ -30,4 +29,5 @@ SNPEFF_CONFIG="$REFBASE/annotations/snpEff.config"
 // set location for region based annotations
 CORE_REGIONS="$REFBASE/annotations/regions-20130225.onebased.txt"
 
-
+// set resistance genes interval_list
+RESISTANCE_LOCI="$REFBASE/annotations/drug_resistance_genes.interval_list"
