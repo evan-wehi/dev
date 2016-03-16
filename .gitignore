@@ -2,5 +2,7 @@
 .bpipe/
 data/fastq/*
 data/aligned_bams/
+data/qc/
+data/variants/
 pipeline.log
 commandlog.txt
