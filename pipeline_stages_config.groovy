@@ -25,17 +25,26 @@ createDictionary = {
     exec "java -jar $PICARD_HOME/CreateSequenceDictionary.jar R=$REF O=$REFBASE/fasta/Pfalciparum.genome.dict"
 }
 
+// only works if PicardTools v2
+//updateVCF = {
+//    doc "Update VCF with new sequence dictionary"
+//    exec """
+//        java -jar $PICARD_HOME/SortVcf.jar
+//          I=$REFSNP1
+//          SEQUENCE_DICTIONARY=$REFBASE/fasta/Pfalciparum.genome.dict 
+//          O=$REFSNP1
+//    """
+//}
+
 // this could probably be broken up into multiple steps
 // but I'm still learning bpipe intricacies 
 remapBWAmem = {
     doc "Extract fastq from BAM file and remap using bwa mem"
-    exec "./revert_remap.sh $input.bam"
-}
-
-sampleID = {
+    // extract sample name and save as  branch variable
     bamfile="$input".replaceAll(".bam", ".merged.bam")
     sm=bamfile.replaceAll(/^.*\/{1}/, '')
     branch.sample="$sm"
+    exec "./revert_remap.sh $input.bam"
 }
 
 @transform(".intervals")
@@ -75,16 +84,15 @@ dedup = {
              REMOVE_DUPLICATES=true 
              VALIDATION_STRINGENCY=LENIENT 
              AS=true 
-             METRICS_FILE=$LOG 
+             METRICS_FILE=$LOG
+             CREATE_INDEX=true 
              OUTPUT=$output.bam
     """
 }
 
-
-@transform(".pass1.table")
 bqsrPass1 = {
     doc "Recalibrate base qualities in a BAM file so that quality metrics match actual observed error rates"
-    output.dir="aligned_bams"
+    output.dir="$REFBASE/aligned_bams"
     exec """
             java -Xmx12g -jar $GATK/GenomeAnalysisTK.jar
                 -T BaseRecalibrator 
@@ -93,16 +101,14 @@ bqsrPass1 = {
                 -knownSites $REFSNP1  
                 -knownSites $REFSNP2 
                 -knownSites $REFSNP3
-                -nt $NTHREAD_GATK
                 -o $output.pass1.table 
         """
     
 }
 
-@transform(".pass2.table")
 bqsrPass2 = {
     doc "Recalibrate base qualities in a BAM file so that quality metrics match actual observed error rates"
-    output.dir="aligned_bams"
+    output.dir="$REFBASE/aligned_bams"
     exec """
             java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar 
                 -T BaseRecalibrator 
@@ -112,14 +118,13 @@ bqsrPass2 = {
                 -knownSites $REFSNP2 
                 -knownSites $REFSNP3 
                 -BQSR $input.pass1.table
-                -nt $NTHREAD_GATK  
                 -o $output.pass2.table 
         """
 }
 
 bqsrApply = {
     doc "Apply BQSR to input BAM file."
-    output.dir="aligned_bams"
+    output.dir="$REFBASE/aligned_bams"
     exec """
         java -jar $GATK/GenomeAnalysisTK.jar  
             -T PrintReads  
@@ -132,23 +137,22 @@ bqsrApply = {
 
 bqsrCheck = {
     doc "Compare pre and post base-quality scores from recalibration"
-    output.dir="qc"
-    from(".pass1.table", ".pass2.table", ".bqsr.pdf") {
+    output.dir="$REFBASE/qc"
+    transform('.pass1.table', '.pass2.table') to('.csv') {
         exec """
             java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
               -T AnalyzeCovariates
               -R $REF
               -before $input.pass1.table 
               -after $input.pass2.table 
-              -plots $ouptut.bqsr.pdf
-
+              -csv $output
         """
     }
 }
 
 fastqc = {
     doc "Run FASTQC to generate QC metrics for the reads post-alignment"
-    output.dir = "qc"
+    output.dir = "$REFBASE/qc"
     transform('.bam')  to('_fastqc.zip')  {
         exec "fastqc --quiet -o ${output.dir} -f bam_mapped $input.bam"
     }
@@ -156,7 +160,7 @@ fastqc = {
 
 // QC metrics at BAM level
 flagstat = {
-    output.dir = "qc"
+    output.dir = "$REFBASE/qc"
     transform('.bam') to('.flagstat') {
         exec "samtools flagstat $input.bam > $output.flagstat"
     }
@@ -165,18 +169,22 @@ flagstat = {
 
 
 depthOfCoverage = {
-    output.dir="qc"
-    transform("bam") to ("sample_statistics","sample_interval_summary") {
+    output.dir="$REFBASE/qc"
+    transform("bam") to("sample_statistics", "sample_summary") {
         exec """
             java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
               -T DepthOfCoverage 
               -R $REF -I $input.bam 
               -omitBaseOutput 
               -ct 1 -ct 5 -ct 10
-              -o $output
+              -mmq 20 -mbq 20
+              -L $RESISTANCE_LOCI
+              -o $output.prefix
         """ 
     }    
 }
+
+
 
 indexVCF = {
     exec "./vcftools_prepare.sh $input.vcf"
@@ -185,17 +193,18 @@ indexVCF = {
 
 callVariants = {
     doc "Call SNPs/SNVs using GATK Haplotype Caller, produces .g.vcf"
-    output.dir="variants"
-    transform(".bam") to(".g.vcf") {}
-    exec """
-        java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar
-            -T HaplotypeCaller 
-            -R $REF
-            -I $input.bam
-            --emitRefConfidence GVCF
-            -gt_mode DISCOVERY
-            -o $output.g.vcf    
+    output.dir="$REFBASE/variants"
+    transform("bam") to("g.vcf") {
+        exec """
+            java -Xmx8g -jar $GATK35/GenomeAnalysisTK.jar
+                -T HaplotypeCaller 
+                -R $REF
+                -I $input.bam
+                --emitRefConfidence GVCF
+                -gt_mode DISCOVERY
+                -o $output.prefix
         """
+    }
 }
 
 //genotype = {
@@ -213,10 +222,10 @@ callVariants = {
 
 // variant recalibration
 vqsrGenerate = {
-    doc "Generate variant quality score recalibration"
+    doc "Generate variant quality score recalibration. Note requires GATK version 3.5"
     output.dir="variants"
     exec """
-         java -Xmx12g -jar $GATK/GenomeAnalysisTK.jar 
+         java -Xmx12g -jar $GATK35/GenomeAnalysisTK.jar 
             -T VariantRecalibrator 
             -R $REF 
             -input all_raw.vcf
