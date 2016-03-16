@@ -33,7 +33,6 @@ M=${SM}.adapters.txt | java -Xmx8g  -jar $PICARD_HOME/SamToFastq.jar \
 INPUT=/dev/stdin \
 CLIPPING_ATTRIBUTE=XT \
 CLIPPING_ACTION=2 \
-RG_TAG=ID \
 OUTPUT_PER_RG=true \
 OUTPUT_DIR=data/fastq/${SM} \
 VALIDATION_STRINGENCY=SILENT \
@@ -55,7 +54,7 @@ do
   echo "RG line: ${rg}"
   # if paired-end
   if [ ! -z $p2 ] 
-    then
+  then
     echo "Input fastq files: ${p1}, ${p2}"
     echo "Running bwa mem with paired end alignments"
     bwa mem -M -t 8 -R "${rg}" $bwaIndex $p1 $p2 | java -Xmx8g -jar $PICARD_HOME/CleanSam.jar \
