@@ -1,5 +1,6 @@
 ////////////////////////////////////////////////////////////
-// GATK-based 'best' practices variant-calling pipeline.
+// GATK-based 'best' practices variant-calling pipeline for 
+// Plasmodium falciparum.
 // 
 // This pipeline is a port of the VLSCI whole genome variant
 // calling pipeline  for from this Git repo to Bpipe:
@@ -8,25 +9,9 @@
 // And modified from
 //     https://github.com/ssadedin/variant_calling_pipeline/
 //
-// There are a number of software requirements, which you should ensure are 
-// satisfied before running the pipeline. These need to be configured 
-// in the file called 'config.groovy' (which is loaded below). A template
-// is provided in config.groovy which you can use to 
-// create the file and set the right paths to your tools and reference
-// data.
 //
 // This pipeline attempts to recreate the WGS processing pipeline developed
 // by the Malaria Genomics Consortium for Plasmodium falciparum. 
-//
-// By default this pipeline will attempt to use all the available cores
-// on the computer it runs on. If you don't wish to do that, limit the 
-// concurrency by running it with the -n flag:
-//
-//    bpipe run -n 4 pipeline.groovy example_data/input_data_wgs/*.fastq.gz
-// 
-// Assumes: paired end reads
-// Assumes: files in form  *<sample_name>*_..._R1.fastq.gz, *<sample_name>*_..._R2.fastq.gz
-//
 //
 ////////////////////////////////////////////////////////////
 
@@ -37,7 +22,8 @@ load 'config.groovy'
 load 'pipeline_stages_config.groovy'
 
 
-run { "*.bam" * [ remapBWAmem ] }
+run {  "*.bam" * [ sampleID + realignIntervals + realignIndels + dedup + bqsrPass1 + bqsrPass2 + bqsrApply + bqsrCheck + fastqc + flagstat + depthOfCoverage + callVariants] }
+//run { "*.bam" * [ remapBWAmem + realignIntervals + realignIndels + dedup ] }
 //
 //run {
     // Create index for reference file
