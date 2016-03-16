@@ -36,17 +36,21 @@ createDictionary = {
 //    """
 //}
 
-// this could probably be broken up into multiple steps
-// but I'm still learning bpipe intricacies 
+// this could probably be broken up into multiple steps i.e. extract, align, merge 
+// but I'm still learning bpipe intricacies
+@filter("remap") 
 remapBWAmem = {
     doc "Extract fastq from BAM file and remap using bwa mem"
+
+    exec "./revert_remap.sh $input.bam"
+}
+
+sampleID = {
     // extract sample name and save as  branch variable
     bamfile="$input".replaceAll(".bam", ".merged.bam")
     sm=bamfile.replaceAll(/^.*\/{1}/, '')
     branch.sample="$sm"
-    exec "./revert_remap.sh $input.bam"
 }
-
 @transform(".intervals")
 realignIntervals = {
     output.dir="$REFBASE/aligned_bams"
@@ -194,7 +198,7 @@ indexVCF = {
 callVariants = {
     doc "Call SNPs/SNVs using GATK Haplotype Caller, produces .g.vcf"
     output.dir="$REFBASE/variants"
-    transform("bam") to("g.vcf") {
+    transform("bam") {
         exec """
             java -Xmx8g -jar $GATK35/GenomeAnalysisTK.jar
                 -T HaplotypeCaller 
@@ -202,33 +206,29 @@ callVariants = {
                 -I $input.bam
                 --emitRefConfidence GVCF
                 -gt_mode DISCOVERY
-                -o $output.prefix
+                -o $sample.g.vcf
         """
     }
 }
 
-//genotype = {
-//    doc "Jointly genotype gVCF files"
-//    output.dir="variants"
-//    exec """
-
-//        gvcf_files=$(find ./variants -name '*.g.vcf' -print0 | xargs -0 -I {} echo '--variant {}')
-//        java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar
-//            -T GenotypeGVCFs
-//            $gvcf_files
-//            -o all_raw.vcf
-//    """
-//}
+combineGVCF = {
+    doc "Jointly genotype gVCF files"
+    output.dir="$REFBASE/variants_combined"
+    gvcfs="$inputs.g.vcf"
+    exec """
+        echo $gvcfs
+    """
+}
 
 // variant recalibration
 vqsrGenerate = {
     doc "Generate variant quality score recalibration. Note requires GATK version 3.5"
-    output.dir="variants"
+    output.dir="$REFBASE/variants_combined"
     exec """
-         java -Xmx12g -jar $GATK35/GenomeAnalysisTK.jar 
+         java -Xmx8g -jar $GATK35/GenomeAnalysisTK.jar 
             -T VariantRecalibrator 
             -R $REF 
-            -input all_raw.vcf
+            -input $input.vcf
             -resource:cross1,training=true $REFSNP1
             -resource:cross2,training=true $REFSNP2
             -resource:cross2,training=true $REFSNP3
@@ -249,44 +249,45 @@ vqsrGenerate = {
 
 vqsrApply = {
     doc "Apply variant quality score recalibration"
-    output.dir="variants"
+    output.dir="$REFBASE/variants_combined"
     exec """
         java -jar $GATK/GenomeAnalysisTK.jar 
             -T ApplyRecalibration 
             -R $REF  
-            -input all_raw.vcf  
+            -input $input.vcf  
             -mode SNP  
             --ts_filter_level 99.0  
-            -recalFile $output.recal  
-            -tranchesFile $output.tranches  
-            -o all_recalibrated.vcf
+            -recalFile $input.recal  
+            -tranchesFile $input.tranches  
+            -o $output.vcf
     """
 }
 
 // variant annotation using snpEff
-annotateVariants = {
+annotate = {
     doc "Annotate variants using snpEff"
+    output.dir="$REFBASE/variants_combined"
     exec """ 
         java -Xmx8g -jar  $SNPEFF_HOME/snpEff.jar 
             -no-downstream 
             -no-upstream 
-            -v  
-            -c $configFile Pf3D7v3 all_recalibrated.vcf > all_recalibrated_anno.vcf
+            -v 
+            -c $configFile Pf3D7v3 $input.vcf > $output.vcf
     """
 }
 
-addRegionsAnnotation = {
+regions = {
     doc "Include core regions from Pf genetic crosses"
     exec """
         bgzip $CORE_REGIONS
         tabix -s 1 -b 2 -e 3 $CORE_REGIONS.gz
-        cat all_recalibrated_anno.vcf | vcf-annotate -a $CORE_REGIONS.gz \
+        cat $input.vcf | vcf-annotate -a $CORE_REGIONS.gz \
             -d key=INFO,ID=RegionType,Number=1,Type=String,Description='The type of genome region within which the variant is found. 
             SubtelomericRepeat: repetitive regions at the ends of the chromosomes. 
             SubtelomericHypervariable: subtelomeric region of poor conservation between the 3D7 reference genome and other samples. 
             InternalHypervariable: chromosome-internal region of poor conservation between the 3D7 reference genome and other samples. 
             Centromere: start and end coordinates of the centromere genome annotation. Core: everything else.' \
-            -c CHROM,FROM,TO,INFO/RegionType > all_recalibrated_anno_regions.vcf
+            -c CHROM,FROM,TO,INFO/RegionType > $output.vcf
 
     """
 }
@@ -299,13 +300,13 @@ filterSNPs = {
         java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
             -T VariantFiltration 
             -R $REF 
-            --filterExpression 'QD < 2.0 || MQ < 40.0 || FS > 60.0 || HaplotypeScore > 13.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0' 
+            --filterExpression 'QD < 2.0 || MQ < 40.0 || FS > 60.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0' 
             --filterName 'GATK_MINIMAL_FILTER'
             --filterExpression 'VQSLOD <= 0 or RegionType != "Core"'
-            --filterName 'MalariaGen Filter'
-            --variant all_recalibrated_anno_regions.vcf
+            --filterName 'MALARIAGEN_FILTER'
+            --variant $input.vcf
             -log $LOG 
-            -o all_recalibrated_anno_regions_filtered.vcf
+            -o $output.vcf
     """
 }
 
