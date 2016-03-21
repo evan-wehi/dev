@@ -22,7 +22,10 @@ fastaIndex = {
 
 createDictionary = {
     doc "Create Sequence dictionary"
-    exec "java -jar $PICARD_HOME/CreateSequenceDictionary.jar R=$REF O=$REFBASE/fasta/Pfalciparum.genome.dict"
+    output.dir="$REFBASE/fasta"
+    from("fasta") to("dict") {
+        exec "java -jar $PICARD_HOME/CreateSequenceDictionary.jar R=$REF O=$output.dict"
+    }
 }
 
 // only works if PicardTools v2
@@ -38,19 +41,62 @@ createDictionary = {
 
 // this could probably be broken up into multiple steps i.e. extract, align, merge 
 // but I'm still learning bpipe intricacies
-@filter("remap") 
-remapBWAmem = {
-    doc "Extract fastq from BAM file and remap using bwa mem"
-
-    exec "./revert_remap.sh $input.bam"
-}
-
+// a bit hacky at the moment but for now it'll do.
 sampleID = {
     // extract sample name and save as  branch variable
-    bamfile="$input".replaceAll(".bam", ".merged.bam")
-    sm=bamfile.replaceAll(/^.*\/{1}/, '')
-    branch.sample="$sm"
+    sm="$input".replaceAll(/^.*\/{1}/, '')
+    branch.sample=sm.replaceAll('.bam', '')
+    exec """
+        echo 'Begin pipeline for isolate: $sample'
+    """
 }
+
+samToFastq = {
+    doc "Extract fastq from BAM file and soft-clip adapters"
+    output.dir="$REFBASE/fastq/$sample"
+    transform(".bam") to(".fastq") {
+        exec """
+        
+        mkdir -p $output.dir;
+
+        java -Xmx4g -jar $PICARD_HOME/RevertSam.jar
+        VALIDATION_STRINGENCY=SILENT 
+        INPUT=$input.bam
+        OUTPUT=/dev/stdout 
+        SORT_ORDER=queryname
+        TMP_DIR=$TMPDIR
+        COMPRESSION_LEVEL=0 | java -Xmx4g -jar $PICARD_HOME/MarkIlluminaAdapters.jar 
+        INPUT=/dev/stdin 
+        OUTPUT=/dev/stdout
+        PE=true
+        ADAPTERS=PAIRED_END 
+        COMPRESSION_LEVEL=0 
+        M=$REFBASE/fastq/$sample/adapters.txt | java -Xmx4g -jar $PICARD_HOME/SamToFastq.jar
+        INPUT=/dev/stdin 
+        CLIPPING_ATTRIBUTE=XT 
+        CLIPPING_ACTION=2 
+        OUTPUT_PER_RG=true 
+        OUTPUT_DIR=$output.dir
+        VALIDATION_STRINGENCY=SILENT 
+        TMP_DIR=$TMPDIR
+        """
+    }
+}
+
+remapByRG = {
+    doc "Remap using bwa-mem"
+    exec "echo $input.dir
+    echo rgline=$(samtools view -H $1 | grep ^@RG )"
+}
+
+@filter("merged")
+remapBWAmem = {
+    doc "Extract fastq from BAM file and remap using bwa mem"
+    output.dir="$REFBASE/aligned_bams/"
+    exec "./revert_remap.sh $input.bam"  
+}
+
+
 @transform(".intervals")
 realignIntervals = {
     output.dir="$REFBASE/aligned_bams"
@@ -58,7 +104,7 @@ realignIntervals = {
         java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
           -T RealignerTargetCreator
           -R $REF 
-          -I $REFBASE/aligned_bams/$sample
+          -I $input.bam
           -log $LOG
           -nt $NTHREAD_GATK 
           -o $output.intervals
@@ -71,10 +117,9 @@ realignIndels = {
         java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar 
           -T IndelRealigner 
           -R $REF 
-          -I $REFBASE/aligned_bams/$sample
+          -I $input.bam
           -targetIntervals $input.intervals 
           -log $LOG
-          -nt $NTHREAD_GATK
           -o $output.bam
     """
 }
@@ -200,7 +245,7 @@ callVariants = {
     output.dir="$REFBASE/variants"
     transform("bam") {
         exec """
-            java -Xmx8g -jar $GATK35/GenomeAnalysisTK.jar
+            java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar
                 -T HaplotypeCaller 
                 -R $REF
                 -I $input.bam
@@ -225,7 +270,7 @@ vqsrGenerate = {
     doc "Generate variant quality score recalibration. Note requires GATK version 3.5"
     output.dir="$REFBASE/variants_combined"
     exec """
-         java -Xmx8g -jar $GATK35/GenomeAnalysisTK.jar 
+         java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar 
             -T VariantRecalibrator 
             -R $REF 
             -input $input.vcf
