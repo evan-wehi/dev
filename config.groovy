@@ -4,8 +4,8 @@ REFBASE="./data"
 // Set a good location for storing large temp files here (probably not /tmp)
 TMPDIR="/usr/local/work/lee.s"
 
-// Set location of Picard tools here
-PICARD_HOME="/usr/local/bioinfsoftware/picard-tools/current/jars"
+// Set location of Picard tools here (we're using the binary versions)
+PICARD_HOME="/usr/local/bioinfsoftware/picard-tools/picard-tools-1.99/jars/"
 
 // Set to the reference FASTA file, which must be indexed
 REF="$REFBASE/fasta/Pfalciparum.genome.fasta"
@@ -20,7 +20,6 @@ LOG="pipeline.log"
 
 // Set GATK location here
 GATK="/usr/local/bioinfsoftware/gatk/current/"
-GATK35="~/GenomeAnalysisTK-3.5"
 // Set location of snpEff here
 SNPEFF_HOME="/usr/local/bioinfsoftware/snpEff/current"
 //Set location of snpEff config file
