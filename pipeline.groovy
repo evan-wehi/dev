@@ -23,8 +23,9 @@ load 'pipeline_stages_config.groovy'
 
 
 run {  
-    "*.bam" * [   sampleID +
-                  remapBWAmem + 
+    "%.bam" * [   sampleID +
+                  samToFastq  +  
+                  remapByRG + 
                   realignIntervals + 
                   realignIndels + 
                   dedup + 
@@ -36,13 +37,14 @@ run {
                   flagstat + 
                   depthOfCoverage + 
                   callVariants
-    ] + 
-    [
-                  combineGVCF + 
-                  vqsrGenerate + 
-                  vqsrApply + 
-                  annotate + 
-                  regions + 
-                  filterSNPs
     ] 
-}
+} 
+//     [
+//                   combineGVCF + 
+//                   vqsrGenerate + 
+//                   vqsrApply + 
+//                   annotate + 
+//                   regions + 
+//                   filterSNPs
+//     ] 
+// }
