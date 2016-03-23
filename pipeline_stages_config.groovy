@@ -52,48 +52,43 @@ sampleID = {
 }
 
 samToFastq = {
-    doc "Extract fastq from BAM file and soft-clip adapters"
+    doc "Extract fastq from BAM file and soft-clip adapters, redirect output."
     output.dir="$REFBASE/fastq/$sample"
-    transform(".bam") to(".fastq") {
+    transform(".bam") to(".txt") {
         exec """
         
         mkdir -p $output.dir;
 
-        java -Xmx4g -jar $PICARD_HOME/RevertSam.jar
+        java -Xmx6g -jar $PICARD_HOME/RevertSam.jar
         VALIDATION_STRINGENCY=SILENT 
         INPUT=$input.bam
         OUTPUT=/dev/stdout 
         SORT_ORDER=queryname
         TMP_DIR=$TMPDIR
-        COMPRESSION_LEVEL=0 | java -Xmx4g -jar $PICARD_HOME/MarkIlluminaAdapters.jar 
+        COMPRESSION_LEVEL=0 | java -Xmx6g -jar $PICARD_HOME/MarkIlluminaAdapters.jar 
         INPUT=/dev/stdin 
         OUTPUT=/dev/stdout
         PE=true
         ADAPTERS=PAIRED_END 
         COMPRESSION_LEVEL=0 
-        M=$REFBASE/fastq/$sample/adapters.txt | java -Xmx4g -jar $PICARD_HOME/SamToFastq.jar
+        M=$REFBASE/fastq/$sample/adapters.txt | java -Xmx6g -jar $PICARD_HOME/SamToFastq.jar
         INPUT=/dev/stdin 
         CLIPPING_ATTRIBUTE=XT 
         CLIPPING_ACTION=2 
         OUTPUT_PER_RG=true 
         OUTPUT_DIR=$output.dir
         VALIDATION_STRINGENCY=SILENT 
-        TMP_DIR=$TMPDIR
+        TMP_DIR=$TMPDIR &> $output.txt
         """
     }
 }
 
-remapByRG = {
-    doc "Remap using bwa-mem"
-    exec "echo $input.dir
-    echo rgline=$(samtools view -H $1 | grep ^@RG )"
-}
 
 @filter("merged")
-remapBWAmem = {
-    doc "Extract fastq from BAM file and remap using bwa mem"
-    output.dir="$REFBASE/aligned_bams/"
-    exec "./revert_remap.sh $input.bam"  
+remapByRG = {
+    doc "Map fastq files by RG using bwa mem and merge"
+    output.dir="$REFBASE/aligned_bams"
+    exec "./revert_remap.sh $input.bam $REFBASE/fastq/$sample $output.bam"  
 }
 
 
@@ -106,7 +101,6 @@ realignIntervals = {
           -R $REF 
           -I $input.bam
           -log $LOG
-          -nt $NTHREAD_GATK 
           -o $output.intervals
     """
 }
