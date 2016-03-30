@@ -42,41 +42,40 @@ createDictionary = {
 // this could probably be broken up into multiple steps i.e. extract, align, merge 
 // but I'm still learning bpipe intricacies
 // a bit hacky at the moment but for now it'll do.
-sampleID = {
-    // extract sample name and save as  branch variable
-    sm="$input".replaceAll(/^.*\/{1}/, '')
-    branch.sample=sm.replaceAll('.bam', '')
-    exec """
-        echo 'Begin pipeline for isolate: $sample'
-    """
-}
-
 samToFastq = {
     doc "Extract fastq from BAM file and soft-clip adapters, redirect output."
-    output.dir="$REFBASE/fastq/$sample"
+    def sm="$input".replaceAll(/^.*\/{1}/, '')
+    def sample=sm.replaceAll('.bam', '')
+    def outdir="$REFBASE/fastq/$sample"
+    output.dir="logs"
     transform(".bam") to(".txt") {
         exec """
+        echo 'Begin pipeline for isolate: $sample'
         
-        mkdir -p $output.dir;
+        mkdir -p $outdir;
 
         java -Xmx6g -jar $PICARD_HOME/RevertSam.jar
         VALIDATION_STRINGENCY=SILENT 
         INPUT=$input.bam
-        OUTPUT=/dev/stdout 
+        OUTPUT=/dev/stdout
+        MAX_RECORDS_IN_RAM=250000 
         SORT_ORDER=queryname
         TMP_DIR=$TMPDIR
         COMPRESSION_LEVEL=0 | java -Xmx6g -jar $PICARD_HOME/MarkIlluminaAdapters.jar 
         INPUT=/dev/stdin 
         OUTPUT=/dev/stdout
         PE=true
-        ADAPTERS=PAIRED_END 
+        ADAPTERS=PAIRED_END
+        MAX_RECORDS_IN_RAM=250000 
+        QUIET=true 
         COMPRESSION_LEVEL=0 
-        M=$REFBASE/fastq/$sample/adapters.txt | java -Xmx6g -jar $PICARD_HOME/SamToFastq.jar
-        INPUT=/dev/stdin 
+        M=$outdir/adapters.txt | java -Xmx6g -jar $PICARD_HOME/SamToFastq.jar
+        INPUT=/dev/stdin
+        MAX_RECORDS_IN_RAM=250000 
         CLIPPING_ATTRIBUTE=XT 
         CLIPPING_ACTION=2 
         OUTPUT_PER_RG=true 
-        OUTPUT_DIR=$output.dir
+        OUTPUT_DIR=$outdir
         VALIDATION_STRINGENCY=SILENT 
         TMP_DIR=$TMPDIR &> $output.txt
         """
@@ -87,8 +86,11 @@ samToFastq = {
 @filter("merged")
 remapByRG = {
     doc "Map fastq files by RG using bwa mem and merge"
+    def sm="$input.bam".replaceAll(/^.*\/{1}/, '')
+    def sample=sm.replaceAll('.bam', '')
+    def outdir="$REFBASE/fastq/$sample"
     output.dir="$REFBASE/aligned_bams"
-    exec "./revert_remap.sh $input.bam $REFBASE/fastq/$sample $output.bam"  
+    exec "./revert_remap.sh $input.bam $outdir $output.bam"  
 }
 
 

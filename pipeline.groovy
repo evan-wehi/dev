@@ -23,8 +23,7 @@ load 'pipeline_stages_config.groovy'
 
 
 run {  
-    "%.bam" * [   sampleID +
-                  samToFastq  +  
+    "%.bam" * [   samToFastq  +  
                   remapByRG + 
                   realignIntervals + 
                   realignIndels + 
