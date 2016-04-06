@@ -34,16 +34,24 @@ run {
                   bqsrCheck + 
                   fastqc + 
                   flagstat + 
-                  depthOfCoverage + 
-                  callVariants
-    ] 
-} 
-//     [
-//                   combineGVCF + 
-//                   vqsrGenerate + 
-//                   vqsrApply + 
-//                   annotate + 
-//                   regions + 
-//                   filterSNPs
-//     ] 
-// }
+                  depthOfCoverage +
+                  callVariants ] + 
+    // after each BAM processed jointly genotype then call biallelic variants
+    [
+                  combineGVCF + 
+                  vqsrGenerate + 
+                  vqsrApply + 
+                  annotate +
+                  barcode + 
+                  regions +
+                  keepSNPs + 
+                  filterSNPs +
+                  cleanVCF +
+                  extractAnno + 
+                  indexVCF +
+                  cleanGDS 
+
+
+
+     ] 
+}

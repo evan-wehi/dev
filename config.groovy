@@ -26,7 +26,9 @@ SNPEFF_HOME="/usr/local/bioinfsoftware/snpEff/current"
 SNPEFF_CONFIG="$REFBASE/annotations/snpEff.config"
 
 // set location for region based annotations
-CORE_REGIONS="$REFBASE/annotations/regions-20130225.onebased.txt"
+CORE_REGIONS="$REFBASE/annotations/regions-20130225.onebased.txt.gz"
 
+// set location for barcode annotations
+BARCODE="$REFBASE/annotations/global_barcode_tidy.txt.gz"
 // set resistance genes interval_list
 RESISTANCE_LOCI="$REFBASE/annotations/drug_resistance_genes.interval_list"

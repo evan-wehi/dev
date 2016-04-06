@@ -4,5 +4,12 @@ data/fastq/*
 data/aligned_bams/
 data/qc/
 data/variants/
+data/variants_combined/
+cache/
 pipeline.log
 commandlog.txt
+logs/
+.DS_Store
+._.DS_Store
+._*
+snpEff*

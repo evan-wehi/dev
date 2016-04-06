@@ -139,7 +139,7 @@ bqsrPass1 = {
     doc "Recalibrate base qualities in a BAM file so that quality metrics match actual observed error rates"
     output.dir="$REFBASE/aligned_bams"
     exec """
-            java -Xmx12g -jar $GATK/GenomeAnalysisTK.jar
+            java -Xmx6g -jar $GATK/GenomeAnalysisTK.jar
                 -T BaseRecalibrator 
                 -R $REF  
                 -I $input.bam  
@@ -155,7 +155,7 @@ bqsrPass2 = {
     doc "Recalibrate base qualities in a BAM file so that quality metrics match actual observed error rates"
     output.dir="$REFBASE/aligned_bams"
     exec """
-            java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar 
+            java -Xmx6g -jar $GATK/GenomeAnalysisTK.jar 
                 -T BaseRecalibrator 
                 -R $REF 
                 -I $input.bam 
@@ -171,7 +171,7 @@ bqsrApply = {
     doc "Apply BQSR to input BAM file."
     output.dir="$REFBASE/aligned_bams"
     exec """
-        java -jar $GATK/GenomeAnalysisTK.jar  
+        java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar  
             -T PrintReads  
             -R $REF 
             -I $input.bam   
@@ -228,18 +228,10 @@ depthOfCoverage = {
         """ 
     }    
 }
-
-
-
-indexVCF = {
-    exec "./vcftools_prepare.sh $input.vcf"
-}
-
-
 callVariants = {
     doc "Call SNPs/SNVs using GATK Haplotype Caller, produces .g.vcf"
     output.dir="$REFBASE/variants"
-    transform("bam") {
+    transform(".bam") to(".g.vcf") {
         exec """
             java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar
                 -T HaplotypeCaller 
@@ -247,7 +239,9 @@ callVariants = {
                 -I $input.bam
                 --emitRefConfidence GVCF
                 -gt_mode DISCOVERY
-                -o $sample.g.vcf
+                -variant_index_type LINEAR -variant_index_parameter 128000
+                -o $output
+
         """
     }
 }
@@ -255,10 +249,16 @@ callVariants = {
 combineGVCF = {
     doc "Jointly genotype gVCF files"
     output.dir="$REFBASE/variants_combined"
-    gvcfs="$inputs.g.vcf"
-    exec """
-        echo $gvcfs
+    def gvcfs = "--variant " + "$inputs.g.vcf".split(" ").join(" --variant ")
+    produce("combined_variants.vcf") {
+        exec """
+            java -Xmx8g -jar $GATK/GenomeAnalysisTK.jar
+                -T GenotypeGVCFs
+                -R $REF
+                $gvcfs
+                -o $output
     """
+    }
 }
 
 // variant recalibration
@@ -270,9 +270,9 @@ vqsrGenerate = {
             -T VariantRecalibrator 
             -R $REF 
             -input $input.vcf
-            -resource:cross1,training=true $REFSNP1
-            -resource:cross2,training=true $REFSNP2
-            -resource:cross2,training=true $REFSNP3
+            -resource:cross1,training=true,truth=true,known=false $REFSNP1
+            -resource:cross2,training=true,truth=true,known=false $REFSNP2
+            -resource:cross3,training=true,truth=true,known=false $REFSNP3
             -an QD
             -an MQ
             -an FS 
@@ -309,20 +309,21 @@ annotate = {
     doc "Annotate variants using snpEff"
     output.dir="$REFBASE/variants_combined"
     exec """ 
-        java -Xmx8g -jar  $SNPEFF_HOME/snpEff.jar 
+        java -Xmx8g -jar  $SNPEFF_HOME/snpEff.jar
+            -c $SNPEFF_CONFIG
             -no-downstream 
             -no-upstream 
-            -v 
-            -c $configFile Pf3D7v3 $input.vcf > $output.vcf
+            Pf3D7v3
+            $input.vcf > $output.vcf
     """
 }
 
 regions = {
-    doc "Include core regions from Pf genetic crosses"
+    doc "Include core regions from Pf genetic crosses version 1"
+    output.dir="$REFBASE/variants_combined"
+
     exec """
-        bgzip $CORE_REGIONS
-        tabix -s 1 -b 2 -e 3 $CORE_REGIONS.gz
-        cat $input.vcf | vcf-annotate -a $CORE_REGIONS.gz \
+        cat $input.vcf | vcf-annotate -a $CORE_REGIONS \
             -d key=INFO,ID=RegionType,Number=1,Type=String,Description='The type of genome region within which the variant is found. 
             SubtelomericRepeat: repetitive regions at the ends of the chromosomes. 
             SubtelomericHypervariable: subtelomeric region of poor conservation between the 3D7 reference genome and other samples. 
@@ -333,22 +334,97 @@ regions = {
     """
 }
 
-// variant filtering
+barcode = {
+    doc "Annotate global barcode SNPs from Neafsey et al., 2008"
+    output.dir="$REFBASE/variants_combined"
+
+    exec """
+        cat $input.vcf | vcf-annotate -a $BARCODE \
+            -d key=INFO,ID=GlobalBarcode,Number=1,Type=String,Description='Global Barcode SNP from Neafsey et al., 2008.' \
+            -c CHROM,FROM,TO,INFO/GlobalBarcode > $output.vcf 
+    """ 
+}
+// select only biallelic SNPs
+keepSNPs= {
+    doc "Kepp only SNPs in VCF file"
+    output.dir="$REFBASE/variants_combined"
+    produce("biallelic_only.vcf") {
+        exec """
+            java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
+                -T SelectVariants \
+                -R $REF
+                -V $input.vcf \
+                -o $output \
+                -selectType SNP
+                --restrictAllelesTo BIALLELIC
+    """
+    }
+}
+
+// variant filtering annotations
 @filter("filter")
 filterSNPs = {
-    output.dir="variants"
+    doc "Annotate VCF file with additional filters at the variant level"
+    output.dir="$REFBASE/variants_combined"
     exec """
         java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar 
             -T VariantFiltration 
-            -R $REF 
-            --filterExpression 'QD < 2.0 || MQ < 40.0 || FS > 60.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0' 
-            --filterName 'GATK_MINIMAL_FILTER'
-            --filterExpression 'VQSLOD <= 0 or RegionType != "Core"'
-            --filterName 'MALARIAGEN_FILTER'
+            -R $REF
+            --clusterSize 3 
+            --clusterWindowSize 30
+            --filterName LowQualMG -filter "VQSLOD <= 0.0 && RegionType != 'Core'"
             --variant $input.vcf
             -log $LOG 
             -o $output.vcf
     """
 }
+
+// apply GATK SelectVariants to filter Low Qual regions 
+cleanVCF = {
+    doc "Clean VCF for analysis ready."
+    output.dir="cache"
+    produce("final_snps.vcf") {
+        exec """
+            java -Xmx4g -jar $GATK/GenomeAnalysisTK.jar
+                -T SelectVariants
+                -R $REF
+                --variant $input.vcf
+                -o $output
+                -ef
+        """
+    }
+}
+
+
+
+indexVCF = {
+    exec "./vcftools_prepare.sh $input.vcf"
+}
+
+
+cleanGDS = {
+    doc "Use clean VCF to construct GDS file"
+    output.dir="cache"
+    def vcf="$input.vcf"+".gz"
+    R {"""
+        library("SeqArray");
+        seqVCF2GDS("$vcf", "$output.gds")
+    """
+    }
+}
+
+extractAnno = {
+    doc "Use snpSift to extract annotations as plain text file"
+    output.dir="cache"
+    produce("final_annotations.txt") {
+        exec """
+            cat $input.vcf | perl $SNPEFF_HOME/scripts/vcfEffOnePerLine.pl |\
+            java -Xmx4g -jar $SNPEFF_HOME/SnpSift.jar extractFields -e "NA" - \
+                CHROM POS REF ALT "ANN[*].ALLELE" GlobalBarcode DP "ANN[*].GENEID" "ANN[*].BIOTYPE" "ANN[*].EFFECT"  "ANN[*].HGVS_P" "ANN[*].ERRORS" > $output
+        """
+
+    }
+}
+
 
 
