@@ -315,6 +315,7 @@ annotate = {
             -no-upstream 
             Pf3D7v3
             $input.vcf > $output.vcf
+        mv snpEff_summary.html snpEff_genes.txt logs/
     """
 }
 
@@ -323,13 +324,9 @@ regions = {
     output.dir="$REFBASE/variants_combined"
 
     exec """
-        cat $input.vcf | vcf-annotate -a $CORE_REGIONS \
-            -d key=INFO,ID=RegionType,Number=1,Type=String,Description='The type of genome region within which the variant is found. 
-            SubtelomericRepeat: repetitive regions at the ends of the chromosomes. 
-            SubtelomericHypervariable: subtelomeric region of poor conservation between the 3D7 reference genome and other samples. 
-            InternalHypervariable: chromosome-internal region of poor conservation between the 3D7 reference genome and other samples. 
-            Centromere: start and end coordinates of the centromere genome annotation. Core: everything else.' \
-            -c CHROM,FROM,TO,INFO/RegionType > $output.vcf
+
+        bcftools annotate -a $CORE_REGIONS -h $CORE_REGIONS_HDR -Ov -o $output.vcf -c CHROM,FROM,TO,RegionType $input.vcf
+
 
     """
 }
@@ -339,9 +336,8 @@ barcode = {
     output.dir="$REFBASE/variants_combined"
 
     exec """
-        cat $input.vcf | vcf-annotate -a $BARCODE \
-            -d key=INFO,ID=GlobalBarcode,Number=1,Type=String,Description='Global Barcode SNP from Neafsey et al., 2008.' \
-            -c CHROM,FROM,TO,INFO/GlobalBarcode > $output.vcf 
+        bcftools annotate -a $BARCODE -h $BARCODE_HDR -Ov -o $output.vcf -c CHROM,FROM,TO,GlobalBarcode $input.vcf
+
     """ 
 }
 // select only biallelic SNPs

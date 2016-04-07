@@ -42,16 +42,14 @@ run {
                   vqsrGenerate + 
                   vqsrApply + 
                   annotate +
-                  barcode + 
                   regions +
+                  barcode + 
                   keepSNPs + 
                   filterSNPs +
                   cleanVCF +
                   extractAnno + 
                   indexVCF +
                   cleanGDS 
-
-
 
      ] 
 }

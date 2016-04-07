@@ -19,7 +19,7 @@ REFSNP3="data/known_sites/hb3_dd2.combined.final.vcf.gz"
 LOG="pipeline.log"
 
 // Set GATK location here
-GATK="/usr/local/bioinfsoftware/gatk/current/"
+GATK="/usr/local/bioinfsoftware/gatk/GenomeAnalysisTK-3.5.0/"
 // Set location of snpEff here
 SNPEFF_HOME="/usr/local/bioinfsoftware/snpEff/current"
 //Set location of snpEff config file
@@ -27,8 +27,10 @@ SNPEFF_CONFIG="$REFBASE/annotations/snpEff.config"
 
 // set location for region based annotations
 CORE_REGIONS="$REFBASE/annotations/regions-20130225.onebased.txt.gz"
+CORE_REGIONS_HDR="$REFBASE/annotations/regions.hdr"
 
 // set location for barcode annotations
 BARCODE="$REFBASE/annotations/global_barcode_tidy.txt.gz"
+BARCODE_HDR="$REFBASE/annotations/global_barcode.hdr"
 // set resistance genes interval_list
 RESISTANCE_LOCI="$REFBASE/annotations/drug_resistance_genes.interval_list"
