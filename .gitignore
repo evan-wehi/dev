@@ -6,6 +6,8 @@ data/qc/
 data/variants/
 data/variants_combined/
 cache/
+scripts/
+reports/
 pipeline.log
 commandlog.txt
 logs/
