@@ -367,8 +367,9 @@ filterSNPs = {
             -T VariantFiltration 
             -R $REF
             --clusterSize 3 
-            --clusterWindowSize 30
-            --filterName LowQualMG -filter "VQSLOD <= 0.0 && RegionType != 'Core'"
+            --clusterWindowSize 10
+            --filterName LowQualVQ -filter "VQSLOD <= 0.0"
+            --filterName NotCore -filter  "RegionType != 'Core'"
             --variant $input.vcf
             -log $LOG 
             -o $output.vcf
@@ -386,7 +387,7 @@ cleanVCF = {
                 -R $REF
                 --variant $input.vcf
                 -o $output
-                -ef
+                -select 'vc.isNotFiltered()'
         """
     }
 }
