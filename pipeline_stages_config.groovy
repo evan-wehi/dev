@@ -28,24 +28,92 @@ createDictionary = {
     }
 }
 
-// only works if PicardTools v2
-//updateVCF = {
-//    doc "Update VCF with new sequence dictionary"
-//    exec """
-//        java -jar $PICARD_HOME/SortVcf.jar
-//          I=$REFSNP1
-//          SEQUENCE_DICTIONARY=$REFBASE/fasta/Pfalciparum.genome.dict 
-//          O=$REFSNP1
-//    """
-//}
-
 // this could probably be broken up into multiple steps i.e. extract, align, merge 
 // but I'm still learning bpipe intricacies
 // a bit hacky at the moment but for now it'll do.
+@filter("reverted")
+makeUBAM = {
+    doc "Create uBAM from input BAM file using revert sam"
+    branch.sample = branch.name
+    output.dir="$REFBASE/ubam"
+    uses(GB:8) {
+        exec """
+            $PICARD_HOME/RevertSam \
+                    I=$input.bam \
+                    O=$output.bam \
+                    SANITIZE=true \
+                    MAX_DISCARD_FRACTION=0.005 \
+                    ATTRIBUTE_TO_CLEAR=XT \
+                    ATTRIBUTE_TO_CLEAR=XN \
+                    ATTRIBUTE_TO_CLEAR=AS \
+                    ATTRIBUTE_TO_CLEAR=OC \
+                    ATTRIBUTE_TO_CLEAR=OP \
+                    SORT_ORDER=queryname \
+                    RESTORE_ORIGINAL_QUALITIES=true \
+                    REMOVE_DUPLICATE_INFORMATION=true \
+                    REMOVE_ALIGNMENT_INFORMATION=true \
+                    TMP_DIR=$TMPDIR 
+        """
+    }
+}
+
+fastqc_unmapped = {
+    doc "Run FASTQC to generate QC metrics for the reads post-alignment"
+    output.dir = "$REFBASE/qc"
+    transform('.bam')  to('_fastqc.zip')  {
+        exec "fastqc --quiet -o ${output.dir} -f bam $input.bam"
+    }
+}
+
+@filter("markilluminaadapters")
+markAdapters = {
+    doc "Mark Illumina Adapters with PicardTools"
+    output.dir="$REFBASE/ubam"
+    def adapter_file="$output.dir" + "/" + "$sample" +"adapters.txt"
+    uses(GB:8) {
+        exec """ 
+            $PICARD_HOME/MarkIlluminaAdapters \
+                I=$input.bam \
+                O=$output.bam \
+                PE=true \
+                M=$adapter_file \
+                TMP_DIR=$TMPDIR
+
+        """
+    }
+}
+
+@preserve
+@filter("mapped")
+remapBWA = {
+    doc "Create merged BAM alignment from unmapped BAM file"
+    output.dir="$REFBASE/aligned_bams"
+    indexes="$REFBASE/fasta/Pfalciparum.genome"
+    def ubam="$REFBASE/ubam/"+"$sample"+".reverted.bam"
+    uses(threads:8,GB:16) {
+    exec """
+        $PICARD_HOME/SamToFastq I=$input.bam FASTQ=/dev/stdout \
+            CLIPPING_ATTRIBUTE=XT CLIPPING_ACTION=2 INTERLEAVE=true NON_PF=true \
+            TMP_DIR=$TMPDIR | \
+        bwa mem -M -t 8 -p $indexes /dev/stdin | \
+        $PICARD_HOME/MergeBamAlignment \
+            ALIGNED_BAM=/dev/stdin \
+            UNMAPPED_BAM=$ubam\
+            OUTPUT=$output.bam \
+            R=$REF CREATE_INDEX=true ADD_MATE_CIGAR=true \
+            CLIP_ADAPTERS=false CLIP_OVERLAPPING_READS=true \
+            INCLUDE_SECONDARY_ALIGNMENTS=true MAX_INSERTIONS_OR_DELETIONS=-1 \
+            PRIMARY_ALIGNMENT_STRATEGY=MostDistant ATTRIBUTES_TO_RETAIN=XS \
+            TMP_DIR=$TMPDIR
+
+
+        """
+    }
+
+}
 samToFastq = {
     doc "Extract fastq from BAM file and soft-clip adapters, redirect output."
-    def sm="$input".replaceAll(/^.*\/{1}/, '')
-    def sample=sm.replaceAll('.bam', '')
+    branch.sample = branch.name
     def outdir="$REFBASE/fastq/$sample"
     output.dir="logs"
     transform(".bam") to(".txt") {
@@ -54,30 +122,29 @@ samToFastq = {
         
         mkdir -p $outdir;
 
-        java -Xmx6g -jar $PICARD_HOME/RevertSam.jar
-        VALIDATION_STRINGENCY=SILENT 
-        INPUT=$input.bam
-        OUTPUT=/dev/stdout
-        MAX_RECORDS_IN_RAM=250000 
-        SORT_ORDER=queryname
-        TMP_DIR=$TMPDIR
-        COMPRESSION_LEVEL=0 | java -Xmx6g -jar $PICARD_HOME/MarkIlluminaAdapters.jar 
-        INPUT=/dev/stdin 
-        OUTPUT=/dev/stdout
-        PE=true
-        ADAPTERS=PAIRED_END
-        MAX_RECORDS_IN_RAM=250000 
-        QUIET=true 
-        COMPRESSION_LEVEL=0 
-        M=$outdir/adapters.txt | java -Xmx6g -jar $PICARD_HOME/SamToFastq.jar
-        INPUT=/dev/stdin
-        MAX_RECORDS_IN_RAM=250000 
-        CLIPPING_ATTRIBUTE=XT 
-        CLIPPING_ACTION=2 
-        OUTPUT_PER_RG=true 
-        OUTPUT_DIR=$outdir
-        VALIDATION_STRINGENCY=SILENT 
-        TMP_DIR=$TMPDIR &> $output.txt
+        $PICARD_HOME/RevertSam \
+            VALIDATION_STRINGENCY=SILENT \
+            INPUT=$input.bam \
+            OUTPUT=/dev/stdout \
+            MAX_RECORDS_IN_RAM=250000 \
+            SORT_ORDER=queryname \
+            TMP_DIR=$TMPDIR \
+            COMPRESSION_LEVEL=0 | $PICARD_HOME/MarkIlluminaAdapters \
+            INPUT=/dev/stdin \
+            OUTPUT=/dev/stdout \
+            PE=true \
+            QUIET=true \
+            M=$outdir/adapters.txt \
+            COMPRESSION_LEVEL=0 | $PICARD_HOME/SamToFastq \
+            INPUT=/dev/stdin \
+            CLIPPING_ATTRIBUTE=XT \
+            CLIPPING_ACTION=2 \
+            NON_PF=true \
+            OUTPUT_PER_RG=true \
+            RG_TAG=ID \
+            OUTPUT_DIR=$outdir \
+            VALIDATION_STRINGENCY=SILENT 
+            TMP_DIR=$TMPDIR &> $output.txt
         """
     }
 }
@@ -86,11 +153,9 @@ samToFastq = {
 @filter("merged")
 remapByRG = {
     doc "Map fastq files by RG using bwa mem and merge"
-    def sm="$input.bam".replaceAll(/^.*\/{1}/, '')
-    def sample=sm.replaceAll('.bam', '')
-    def outdir="$REFBASE/fastq/$sample"
+    def fastqdir="$REFBASE/fastq/$sample"
     output.dir="$REFBASE/aligned_bams"
-    exec "./revert_remap.sh $input.bam $outdir $output.bam"  
+    exec "./revert_remap.sh $input.bam $fastqdir $output.bam"  
 }
 
 
@@ -107,6 +172,7 @@ realignIntervals = {
     """
 }
 
+@filter("realignindels")
 realignIndels = {
     output.dir="$REFBASE/aligned_bams"
     exec """
@@ -119,17 +185,18 @@ realignIndels = {
           -o $output.bam
     """
 }
-
+@filter("dedup")
 dedup = {
     doc "Mark Duplicates with PicardTools"
-    output.dir="$REFBASE/aligned_bams" 
+    output.dir="$REFBASE/aligned_bams"
+    def metrics="$REFBASE/qc/" + "$sample" +".dup.metrics.txt" 
     exec """
-        java -Xmx6g -Djava.io.tmpdir=$TMPDIR -jar $PICARD_HOME/MarkDuplicates.jar
+        $PICARD_HOME/MarkDuplicates
              INPUT=$input.bam
              REMOVE_DUPLICATES=true 
              VALIDATION_STRINGENCY=LENIENT 
              AS=true 
-             METRICS_FILE=$LOG
+             METRICS_FILE=$metrics
              CREATE_INDEX=true 
              OUTPUT=$output.bam
     """
@@ -151,6 +218,7 @@ bqsrPass1 = {
     
 }
 
+
 bqsrPass2 = {
     doc "Recalibrate base qualities in a BAM file so that quality metrics match actual observed error rates"
     output.dir="$REFBASE/aligned_bams"
@@ -167,6 +235,8 @@ bqsrPass2 = {
         """
 }
 
+@preserve
+@filter("final")
 bqsrApply = {
     doc "Apply BQSR to input BAM file."
     output.dir="$REFBASE/aligned_bams"
@@ -195,7 +265,9 @@ bqsrCheck = {
     }
 }
 
-fastqc = {
+
+// QC metrics at BAM level
+fastqc_mapped = {
     doc "Run FASTQC to generate QC metrics for the reads post-alignment"
     output.dir = "$REFBASE/qc"
     transform('.bam')  to('_fastqc.zip')  {
@@ -203,7 +275,33 @@ fastqc = {
     }
 }
 
-// QC metrics at BAM level
+@transform(".alignment_metrics")
+alignment_metrics = {
+    doc "Collect alignment summary statistics"
+    output.dir="$REFBASE/qc"
+
+    exec """ 
+        $PICARD_HOME/CollectAlignmentSummaryMetrics \
+            R=$REF \
+            I=$input.bam \
+            O=$output.alignment_summary
+    """
+}
+
+@transform(".insert_metrics")
+insert_metrics = {
+    doc "Collect insert size metrics"
+    output.dir="$REFBASE/qc"
+    def histogram="$output.dir" + "/" + "$sample" + "is_distribution.pdf"
+    exec """
+        $PICARD_HOME/CollectInsertSizeMetrics \
+            I=$input.bam \
+            O=$output.insert_metrics \
+            H=$histogram 
+    """
+
+}
+
 flagstat = {
     output.dir = "$REFBASE/qc"
     transform('.bam') to('.flagstat') {
@@ -239,13 +337,13 @@ callVariants = {
                 -I $input.bam
                 --emitRefConfidence GVCF
                 -gt_mode DISCOVERY
-                -variant_index_type LINEAR -variant_index_parameter 128000
                 -o $output
 
         """
     }
 }
 
+@preserve
 combineGVCF = {
     doc "Jointly genotype gVCF files"
     output.dir="$REFBASE/variants_combined"
@@ -367,7 +465,7 @@ filterSNPs = {
             -T VariantFiltration 
             -R $REF
             --clusterSize 3 
-            --clusterWindowSize 10
+            --clusterWindowSize 30
             --filterName LowQualVQ -filter "VQSLOD <= 0.0"
             --filterName NotCore -filter  "RegionType != 'Core'"
             --variant $input.vcf
@@ -376,7 +474,8 @@ filterSNPs = {
     """
 }
 
-// apply GATK SelectVariants to filter Low Qual regions 
+// apply GATK SelectVariants to filter Low Qual regions
+@preserve 
 cleanVCF = {
     doc "Clean VCF for analysis ready."
     output.dir="cache"
