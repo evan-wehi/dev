@@ -5,7 +5,7 @@ REFBASE="./data"
 TMPDIR="/usr/local/work/lee.s"
 
 // Set location of Picard tools here (we're using the binary versions)
-PICARD_HOME="/usr/local/bioinfsoftware/picard-tools/picard-tools-1.99/jars/"
+PICARD_HOME="/usr/local/bioinfsoftware/picard-tools/picard-tools-2.2.2/bin/"
 
 // Set to the reference FASTA file, which must be indexed
 REF="$REFBASE/fasta/Pfalciparum.genome.fasta"
