@@ -6,12 +6,14 @@
 set -e
 
 PICARD_HOME=/usr/local/bioinfsoftware/picard-tools/picard-tools-1.99/jars/
+TEMPDIR=/usr/local/work/lee.s
 bwaIndex=./data/fasta/Pfalciparum.genome
 # extract SM and RG tags
 bam=$1
-SM=$(basename $1 .bam)
+SM=$(basename $bam .bam)
 echo $SM
-rgline=$(samtools view -H $1 | grep ^@RG )
+# save RG line to temporary header file
+samtools view -H $bam | grep ^@RG > ${TEMPDIR}/${SM}_header.txt
 
 fastqDir=$2
 outputBam=$3
@@ -23,7 +25,7 @@ for p1 in $r1
 do
   echo $p1
   id=$(basename $p1 _1.fastq)
-  rg=$(echo -e $rgline | grep -e ID:$id | sed 's/ /\\t/g')
+  rg=$(cat ${TEMPDIR}/${SM}_header.txt | grep -e ID:$id | sed 's/ /\\t/g')
   echo "Aligning SM: ${SM} for ID:${id}"
   p2=$(find ${fastqDir} -name "${id}_2.fastq")
   echo "RG line: ${rg}"
@@ -55,6 +57,7 @@ do
   fi
 
 done
+wait
 
 # merge bams and output to aligned_bams directory
 sort_bams=$(find $fastqDir -name "${SM}*.sort.bam" -print0 | xargs -0 -I {} echo "INPUT={} ")

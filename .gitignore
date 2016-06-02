@@ -1,3 +1,4 @@
+data/ubam/*
 *.pyc
 .bpipe/
 data/fastq/*
