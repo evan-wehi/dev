@@ -33,26 +33,27 @@ createDictionary = {
 // a bit hacky at the moment but for now it'll do.
 @filter("reverted")
 makeUBAM = {
-    doc "Create uBAM from input BAM file using revert sam"
+    doc "Create uBAM from input BAM file using revert sam. Note we clean bam (revert mapQ=0 for unmapped reads) file before reverting."
     branch.sample = branch.name
     output.dir="$REFBASE/ubam"
     uses(GB:8) {
         exec """
             $PICARD_HOME/RevertSam \
-                    I=$input.bam \
-                    O=$output.bam \
-                    SANITIZE=true \
-                    MAX_DISCARD_FRACTION=0.005 \
-                    ATTRIBUTE_TO_CLEAR=XT \
-                    ATTRIBUTE_TO_CLEAR=XN \
-                    ATTRIBUTE_TO_CLEAR=AS \
-                    ATTRIBUTE_TO_CLEAR=OC \
-                    ATTRIBUTE_TO_CLEAR=OP \
-                    SORT_ORDER=queryname \
-                    RESTORE_ORIGINAL_QUALITIES=true \
-                    REMOVE_DUPLICATE_INFORMATION=true \
-                    REMOVE_ALIGNMENT_INFORMATION=true \
-                    TMP_DIR=$TMPDIR 
+                I=$input.bam \
+                O=$output.bam \
+                SANITIZE=true \
+                MAX_DISCARD_FRACTION=0.005 \
+                ATTRIBUTE_TO_CLEAR=XT \
+                ATTRIBUTE_TO_CLEAR=XN \
+                ATTRIBUTE_TO_CLEAR=AS \
+                ATTRIBUTE_TO_CLEAR=OC \
+                ATTRIBUTE_TO_CLEAR=OP \
+                SORT_ORDER=queryname \
+                RESTORE_ORIGINAL_QUALITIES=true \
+                REMOVE_DUPLICATE_INFORMATION=true \
+                REMOVE_ALIGNMENT_INFORMATION=true \
+                VALIDATION_STRINGENCY=SILENT \
+                TMP_DIR=$TMPDIR 
         """
     }
 }
@@ -84,7 +85,6 @@ markAdapters = {
 }
 
 @preserve
-@filter("mapped")
 remapBWA = {
     doc "Create merged BAM alignment from unmapped BAM file"
     output.dir="$REFBASE/aligned_bams"
@@ -111,53 +111,6 @@ remapBWA = {
     }
 
 }
-samToFastq = {
-    doc "Extract fastq from BAM file and soft-clip adapters, redirect output."
-    branch.sample = branch.name
-    def outdir="$REFBASE/fastq/$sample"
-    output.dir="logs"
-    transform(".bam") to(".txt") {
-        exec """
-        echo 'Begin pipeline for isolate: $sample'
-        
-        mkdir -p $outdir;
-
-        $PICARD_HOME/RevertSam \
-            VALIDATION_STRINGENCY=SILENT \
-            INPUT=$input.bam \
-            OUTPUT=/dev/stdout \
-            MAX_RECORDS_IN_RAM=250000 \
-            SORT_ORDER=queryname \
-            TMP_DIR=$TMPDIR \
-            COMPRESSION_LEVEL=0 | $PICARD_HOME/MarkIlluminaAdapters \
-            INPUT=/dev/stdin \
-            OUTPUT=/dev/stdout \
-            PE=true \
-            QUIET=true \
-            M=$outdir/adapters.txt \
-            COMPRESSION_LEVEL=0 | $PICARD_HOME/SamToFastq \
-            INPUT=/dev/stdin \
-            CLIPPING_ATTRIBUTE=XT \
-            CLIPPING_ACTION=2 \
-            NON_PF=true \
-            OUTPUT_PER_RG=true \
-            RG_TAG=ID \
-            OUTPUT_DIR=$outdir \
-            VALIDATION_STRINGENCY=SILENT 
-            TMP_DIR=$TMPDIR &> $output.txt
-        """
-    }
-}
-
-
-@filter("merged")
-remapByRG = {
-    doc "Map fastq files by RG using bwa mem and merge"
-    def fastqdir="$REFBASE/fastq/$sample"
-    output.dir="$REFBASE/aligned_bams"
-    exec "./revert_remap.sh $input.bam $fastqdir $output.bam"  
-}
-
 
 @transform(".intervals")
 realignIntervals = {
@@ -185,6 +138,7 @@ realignIndels = {
           -o $output.bam
     """
 }
+
 @filter("dedup")
 dedup = {
     doc "Mark Duplicates with PicardTools"
@@ -236,7 +190,6 @@ bqsrPass2 = {
 }
 
 @preserve
-@filter("final")
 bqsrApply = {
     doc "Apply BQSR to input BAM file."
     output.dir="$REFBASE/aligned_bams"
@@ -284,7 +237,7 @@ alignment_metrics = {
         $PICARD_HOME/CollectAlignmentSummaryMetrics \
             R=$REF \
             I=$input.bam \
-            O=$output.alignment_summary
+            O=$output.alignment_metrics
     """
 }
 
@@ -412,8 +365,8 @@ annotate = {
             -no-downstream 
             -no-upstream 
             Pf3D7v3
-            $input.vcf > $output.vcf
-        mv snpEff_summary.html snpEff_genes.txt logs/
+            $input.vcf > $output.vcf ;  
+
     """
 }
 
