@@ -16,3 +16,6 @@ logs/
 ._.DS_Store
 ._*
 snpEff*
+.ipynb_checkpoints/
+samples*
+report_figures/
