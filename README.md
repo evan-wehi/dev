@@ -79,5 +79,10 @@ limiting the availble memory to all processes by reducing MAX_JAVA_MEM.
 MAX_JAVA_MEM=4g bpipe run -n 4 pipeline.groovy *.bam
 ```
 
+# Appendix
+Where were the genomes downloaded from?
+PReichenowi - http://plasmodb.org/common/downloads/Current_Release/PreichenowiCDC/fasta/data/PlasmoDB-28_PreichenowiCDC_Genome.fasta
 
-
+All the genetic crosses, fasta and gff files for this pipeline were obtained from
+Malaria Gen Pf3k v5 pilot data.
+PFalciparum - ftp://ngs.sanger.ac.uk/production/pf3k/release_5/
