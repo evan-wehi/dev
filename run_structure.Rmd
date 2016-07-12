@@ -1,0 +1,48 @@
+```{r structure_pipeline}
+library(parallel)
+set.seed(19900101)
+# prelim setup
+# number of Ks to try
+tryK <- 1L:20L
+n.runs <- 1L:20L
+stopifnot(file.exists("MAL192.str"))
+stopifnot(file.exists("mainparams"))
+stopifnot(file.exists("extraparams"))
+
+# output files (will be appended by out_f from structure)
+out_files <- outer(n.runs, tryK, function(x,y) paste0("str_run_", 
+                                                      stringr::str_pad(x, width = 2, pad = 0), 
+                                                      "_K_", 
+                                                      stringr::str_pad(y, width = 2, pad = 0), 
+                                                      ".out"))
+log_files <- gsub("out", "log", out_files)
+
+structure_binary <- "/usr/local/bioinf/bin/structure"
+# run structure in parallel
+n.cores <- 20
+# create function to run structure, assumes that mainparams/extraparams 
+# file is in same path as current wd in Rscript
+run_structure <- function(out_file, log_file) {
+  k <- as.integer(stringr::str_extract(out_file, "[0-9]{2}\\b"))
+  return(system(paste(structure_binary, "-K", k, "-D", 
+                      round(runif(1) * 1e8), "-o", out_file, "&>", log_file)))
+}
+
+st_runs <- mcmapply(run_structure, out_files, log_files, 
+                    mc.cores = n.cores, mc.set.seed = TRUE)
+
+str_filelist <- mapply(loadStructure, paste0(out_files, "_f"), 
+                       log_files, SIMPLIFY = FALSE)
+
+# save parsed output
+saveRDS(str_filelist, file = "structure_runs_MAL192.rds")
+
+# mv to new directory
+if (!dir.exists("structure_runs")) {
+    dir.create("structure_runs")
+}
+
+system("mv *.out_f structure_runs/")
+system("mv *.log structure_runs/")
+system("mv seed.txt structure_runs/")
+```
