@@ -36,8 +36,8 @@ Data file format
                               whether to use popinfo when USEPOPINFO==1
 #define LOCDATA 0     // (B) Input file contains a location identifier
 
-#define PHENOTYPE 0     // (B) Input file contains phenotype information
-#define EXTRACOLS  0    // (int) Number of additional columns of data 
+#define PHENOTYPE 1     // (B) Input file contains phenotype information
+#define EXTRACOLS  1    // (int) Number of additional columns of data 
                              before the genotype data start.
 
 #define MARKERNAMES      0  // (B) data file contains row of marker names
