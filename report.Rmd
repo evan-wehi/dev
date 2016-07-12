@@ -21,6 +21,27 @@ qc_path <- "data/qc/"
 bpipe_prefix <- ".reverted.markilluminaadapters.remapBWA.realignindels.dedup.bqsrApply."
 final_vcf <- "cache/final_snps.cleanGDS.gds"
 
+# check OS system
+os <- Sys.info()['sysname']
+
+if (os == 'Darwin') {
+  # binaries for manipulating VCF files
+  vcftools_bin <- "/Users/lee.s/anaconda/bin/vcftools"
+  vcf2npy_bin <- "/Users/lee.s/anaconda/envs/py2/bin/vcf2npy"
+  vcfnpy2hdf5_bin <-"/Users/lee.s/anaconda/envs/py2/bin/vcfnpy2hdf5"
+  bgzip <- "/Users/lee.s/anaconda/envs/py2/bin/bgzip"
+  tabix <- "/Users/lee.s/anaconda/envs/py2/bin/tabix -p vcf"
+  
+  
+} else {
+  # binaries for manipulating VCF files
+  vcftools_bin <- "/usr/local/bioinf/bin/vcftools"
+  vcf2npy_bin <- "~/.local/bin/vcf2npy"
+  vcfnpy2hdf5_bin <-"~/.local/bin/vcfnpy2hdf5"
+  bgzip <- "/usr/local/bioinf/bin/bgzip"
+  tabix <- "/usr/local/bioinf/bin/tabix -p vcf"
+}
+
 ```
 
 # Introduction
@@ -392,7 +413,7 @@ set - meaning we can be relatively confident in their genotype calls.
 First, we plot the B-allele frequency distrubitions for the remaining SNVs and
 samples. There are few samples with a strong signal indicating that there
 are multiple infections. 
-```{r baf-plots}
+```{r baf-plots, include=FALSE}
 bf <- bafMatrix(variants)
 
 for (sample in sort(samples_kept)) {
@@ -479,14 +500,9 @@ package `scikit-allel`. We extract samples that have MOI = 1 and use the variant
 list we obtained before. 
 
 ```{r hdf5-pipeline}
-# binaries for manipulating VCF files
-vcftools_bin <- "/usr/local/bioinf/bin/vcftools"
-vcf2npy_bin <- "~/.local/bin/vcf2npy"
-vcfnpy2hdf5_bin <-"~/.local/bin/vcfnpy2hdf5"
-bgzip <- "/usr/local/bioinf/bin/bgzip"
-tabix <- "/usr/local/bioinf/bin/tabix -p vcf"
-
 print("Now creating HDF5 file for PNG")
+
+system("source activate py27")
 
 raw_vcf <- "cache/final_snps.vcf.gz"
 
@@ -495,7 +511,6 @@ vcf_out <- "cache/png_maf_moi1_filtered.vcf.gz"
 vcf_filter <- paste(vcftools_bin, "--gzvcf", raw_vcf,
                     "--keep", sample_out,
                     "--positions", snp_out,
-                    "--maf 0.01", 
                     "--recode --recode-INFO-all --stdout |",
                     bgzip, "-c >",  vcf_out, ";", 
                     tabix, vcf_out ) 
@@ -529,8 +544,8 @@ for(chr in chrom) {
                       "--group", chr)
     system(hdf5_cmd)
 }
+system("source deactivate")
 ```
-
 
 # Appendix
 ```{r sessionInfo}
