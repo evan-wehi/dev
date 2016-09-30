@@ -1,2 +1,2 @@
 # dev
-Miscellaneous work in development
+Miscellaneous work in progress
