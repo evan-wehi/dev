@@ -11,6 +11,7 @@ import subprocess
 import traceback
 
 HOME = '/wehisan/home/allstaff/t/thomas.e'
+QUEUE = 'thomas_e-1'
 
 #SOFTWARE = '/wehisan/general/system/bioinf-software/bioinfsoftware'
 SOFTWARE = '/home/thomas.e/software'
@@ -53,7 +54,7 @@ def processFile(forward, backward):
     Trim
     """ 
     trimmedName = WORK_DIR +'/' + baseName + '-trimmed.fastq.gz'
-    trim(forward, backward, trimmedName, executor)
+#     trim(forward, backward, trimmedName, executor)
     
     """
     Align
@@ -61,7 +62,7 @@ def processFile(forward, backward):
     forward  = WORK_DIR + '/' + baseName + '-trimmed_1P.fastq.gz'
     backward = WORK_DIR + '/' + baseName + '-trimmed_2P.fastq.gz'
     alignedName = WORK_DIR + '/' + baseName + '-aligned.bam'
-    align(forward, backward, alignedName, executor)
+#     align(forward, backward, alignedName, executor)
 
     """
     Sort and index
@@ -76,7 +77,7 @@ def processFile(forward, backward):
     
 def samSort(alignedName, sortedName, executor):
     SAM = SOFTWARE + '/samtools/samtools-1.3.1/bin/samtools'
-    sort = [SAM + ' view -b ' + alignedName, SAM + ' sort - > ' + sortedName]
+    sort = [SAM + ' view -b -@ ' + str(NP_THREADS) + ' ' + alignedName, SAM + ' sort -@ ' + str(NP_THREADS) + ' - > ' + sortedName]
     executor(sort, infn=alignedName, outfn=sortedName)
 
 
@@ -84,7 +85,7 @@ def initScript(baseName):
     fn = SCRIPTS_DIR + '/' + baseName + '.sh'
     script = open(fn, 'w')
     print('#!/bin/sh\n', file=script)
-    print('#PBS -l procs=' + str(NP_THREADS) + '\n', file=script)
+    print('#PBS -l nodes=1:ppn=' + str(NP_THREADS) + '\n', file=script)
     return script
     
 def scriptWriter(cmd, script, outfn=None, infn=None):
@@ -126,7 +127,7 @@ def osExecutor(cmd, logger, outfn=None):
         raise ChildProcessError(cmd + '\ncompleted abnormally: rc=' + str(rc))
     
 def gridss(infile, baseName, executor):
-    GRIDSS_JAR = HOME + '/micronuclei/gridss-0.11.7-jar-with-dependencies.jar'
+    GRIDSS_JAR = HOME + '/dev//micronuclei/gridss-0.11.7-jar-with-dependencies.jar'
     GRIDSS = 'java -ea -Xmx16g -cp ' + GRIDSS_JAR
     
     outfile = WORK_DIR + '/' + baseName + '.vcf'
@@ -169,7 +170,7 @@ def makedir(wdir):
     
 def trim(forward, backward, out, executor):
     TRIMMOMATIC = 'java -jar ' + SOFTWARE + '/trimmomatic/current/trimmomatic-0.36.jar'
-    ADAPTORS = 'ILLUMINACLIP:' + SOFTWARE + '/trimmomatic/current/adapters/TruSeq3-PE.fa:2:30:10'
+    ADAPTORS = 'ILLUMINACLIP:' + SOFTWARE + '/trimmomatic/current/adapters/TruSeq3-PE.fa:1:30:20:4:true'
 
     cmd = TRIMMOMATIC + ' PE ' + '-threads ' + str(NP_THREADS) + ' ' + forward +' ' + backward + ' -baseout ' + out + ' ' + ADAPTORS
     
