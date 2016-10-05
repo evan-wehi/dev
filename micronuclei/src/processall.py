@@ -54,7 +54,8 @@ def processFile(forward, backward):
     Trim
     """ 
     trimmedName = WORK_DIR +'/' + baseName + '-trimmed.fastq.gz'
-#     trim(forward, backward, trimmedName, executor)
+    trim(forward, backward, trimmedName, executor)
+    print('echo trim done\n', file=script)
     
     """
     Align
@@ -62,18 +63,21 @@ def processFile(forward, backward):
     forward  = WORK_DIR + '/' + baseName + '-trimmed_1P.fastq.gz'
     backward = WORK_DIR + '/' + baseName + '-trimmed_2P.fastq.gz'
     alignedName = WORK_DIR + '/' + baseName + '-aligned.bam'
-#     align(forward, backward, alignedName, executor)
+    align(forward, backward, alignedName, executor)
+    print('echo align done\n', file=script)
 
     """
     Sort and index
     """
     sortedName = WORK_DIR + '/' + baseName + '-sorted.bam'
     samSort(alignedName, sortedName, executor)
+    print('echo sort done\n', file=script)
     
     """
     call with GRIDSS
     """
     gridss(sortedName, baseName, executor)
+    print('echo call done\n', file=script)
     
 def samSort(alignedName, sortedName, executor):
     SAM = SOFTWARE + '/samtools/samtools-1.3.1/bin/samtools'
