@@ -9,7 +9,8 @@ import os
 
 HOME = os.getenv('HOME')
 CMD = '/bin/hostname'
-WAIT_TIME = 60
+WAIT_TIME = drmaa.Session.TIMEOUT_WAIT_FOREVER
+JOB_QUEUE = 'thomas_e-1'
 
 s=drmaa.Session()
 s.initialize()
@@ -18,22 +19,23 @@ jt = s.createJobTemplate()
 jt.workingDirectory = drmaa.JobTemplate.HOME_DIRECTORY
 jt.remoteCommand = CMD
 jt.outputPath = drmaa.JobTemplate.HOME_DIRECTORY
-jt.nativeSpecification = '-q small'
+jt.nativeSpecification = '-q ' + JOB_QUEUE
 
-ids = s.runBulkJobs(jt, 1, 1, 1)
+jid = s.runJob(jt)
 
-print('Job started: ' + ids[0])
+print('Job started: ' + jid)
 
-waiting = True
-while waiting:
-    try:
-        s.synchronize(ids, WAIT_TIME, False)
-        waiting = False
-    except drmaa.errors.ExitTimeoutException:
-        print('waiting...')
+# waiting = True
+# while waiting:
+#     try:
+#         info=s.wait(jid, 1)
+#         waiting = False
+#     except drmaa.errors.ExitTimeoutException:
+#         print('waiting...')
         
-info=s.wait(ids[0], drmaa.Session.TIMEOUT_WAIT_FOREVER)
         
+info=s.wait(jid, -1)
+
 print( '-' * 76)
 print("""
 id:                        %(jobId)s

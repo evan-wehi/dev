@@ -54,8 +54,8 @@ def processFile(forward, backward):
     Trim
     """ 
     trimmedName = WORK_DIR +'/' + baseName + '-trimmed.fastq.gz'
-    trim(forward, backward, trimmedName, executor)
-    print('echo trim done\n', file=script)
+#     trim(forward, backward, trimmedName, executor)
+#     print('echo trim done\n', file=script)
     
     """
     Align
@@ -63,19 +63,20 @@ def processFile(forward, backward):
     forward  = WORK_DIR + '/' + baseName + '-trimmed_1P.fastq.gz'
     backward = WORK_DIR + '/' + baseName + '-trimmed_2P.fastq.gz'
     alignedName = WORK_DIR + '/' + baseName + '-aligned.bam'
-    align(forward, backward, alignedName, executor)
-    print('echo align done\n', file=script)
+#     align(forward, backward, alignedName, executor)
+#     print('echo align done\n', file=script)
 
     """
     Sort and index
     """
     sortedName = WORK_DIR + '/' + baseName + '-sorted.bam'
-    samSort(alignedName, sortedName, executor)
-    print('echo sort done\n', file=script)
+#     samSort(alignedName, sortedName, executor)
+#     print('echo sort done\n', file=script)
     
     """
     call with GRIDSS
     """
+    print('export PATH=$PATH:/home/thomas.e/software/bowtie2/current/bin/\n', file=script)
     gridss(sortedName, baseName, executor)
     print('echo call done\n', file=script)
     
@@ -131,12 +132,12 @@ def osExecutor(cmd, logger, outfn=None):
         raise ChildProcessError(cmd + '\ncompleted abnormally: rc=' + str(rc))
     
 def gridss(infile, baseName, executor):
-    GRIDSS_JAR = HOME + '/dev//micronuclei/gridss-0.11.7-jar-with-dependencies.jar'
+    GRIDSS_JAR = HOME + '/dev/micronuclei/gridss-0.11.7-jar-with-dependencies.jar'
     GRIDSS = 'java -ea -Xmx16g -cp ' + GRIDSS_JAR
     
     outfile = WORK_DIR + '/' + baseName + '.vcf'
     cmd = GRIDSS + ' au.edu.wehi.idsv.Idsv' + \
-        ' TMP_DIR=/tmp WORKING_DIR=/tmp REFERENCE=' + REF_SEQ + \
+        ' TMP_DIR=$HOME/tmp WORKING_DIR=$HOME/tmp REFERENCE=' + REF_SEQ + \
         ' INPUT=' + infile + ' IC=1' + \
         ' OUTPUT=' + outfile + \
         ' THREADS=' + str(NP_THREADS)

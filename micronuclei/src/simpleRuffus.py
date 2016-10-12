@@ -9,13 +9,18 @@ from ruffus.drmaa_wrapper import run_job
 from drmaa import Session
 from glob import glob
 
+HOST = '10.1.17.117'
+
 input_file = glob('*.in')
+JOB_QUEUE = 'thomas_e-1'
 
 def stage1(inf, outf, session):
+    import pydevd
+    pydevd.settrace(HOST, stdoutToServer=True, stderrToServer=True)
     run_job(cmd_str = 'cp ' + inf + ' ' + outf,
             job_name = 'stage1',
             drmaa_session = session,
-            job_other_options = '-q small')
+            job_other_options = '-q ' + JOB_QUEUE)
     
     
 def originate(stuff):
