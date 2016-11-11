@@ -8,7 +8,7 @@ import drmaa
 import os
 
 HOME = os.getenv('HOME')
-CMD = '/bin/hostname'
+CMD = 'exit 17'
 WAIT_TIME = drmaa.Session.TIMEOUT_WAIT_FOREVER
 JOB_QUEUE = 'thomas_e-1'
 
@@ -19,6 +19,7 @@ jt = s.createJobTemplate()
 jt.workingDirectory = drmaa.JobTemplate.HOME_DIRECTORY
 jt.remoteCommand = CMD
 jt.outputPath = drmaa.JobTemplate.HOME_DIRECTORY
+jt.jobCategory = JOB_QUEUE
 jt.nativeSpecification = '-q ' + JOB_QUEUE
 
 jid = s.runJob(jt)
@@ -49,3 +50,5 @@ resource usage:
 %(resourceUsage)s
 """ % info._asdict()
 )
+print( '-' * 76)
+print(info)
