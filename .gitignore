@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -88,3 +89,26 @@ ENV/
 # Rope project settings
 .ropeproject
 ._cluster_test.py
+=======
+data/ubam/*
+*.pyc
+.bpipe/
+data/fastq/*
+data/aligned_bams/
+data/qc/
+data/variants/
+data/variants_combined/
+cache/
+scripts/
+reports/
+pipeline.log
+commandlog.txt
+logs/
+.DS_Store
+._.DS_Store
+._*
+snpEff*
+.ipynb_checkpoints/
+samples*
+report_figures/
+>>>>>>> dda7fedd29e1f6cdf277c8e30a80697dc2c2a67e
